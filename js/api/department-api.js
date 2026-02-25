@@ -3,7 +3,7 @@ const DepartmentAPI = {
     // Get all departments
     async getAll() {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
                 .order('name');
@@ -19,7 +19,7 @@ const DepartmentAPI = {
     // Get active departments only
     async getActive() {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
                 .eq('status', 'active')
@@ -36,7 +36,7 @@ const DepartmentAPI = {
     // Get single department by ID
     async getById(id) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
                 .eq('id', id)
@@ -53,7 +53,7 @@ const DepartmentAPI = {
     // Create new department
     async create(department) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('departments')
                 .insert({
                     name: department.name.trim(),
@@ -79,13 +79,13 @@ const DepartmentAPI = {
     async update(id, updates) {
         try {
             // Get old value for audit
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('departments')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('departments')
                 .update({
                     name: updates.name?.trim(),
@@ -112,7 +112,7 @@ const DepartmentAPI = {
     async delete(id) {
         try {
             // Check for assigned laborers
-            const { count: laborerCount } = await supabase
+            const { count: laborerCount } = await supabaseClient
                 .from('laborers')
                 .select('*', { count: 'exact', head: true })
                 .eq('department_id', id);
@@ -122,7 +122,7 @@ const DepartmentAPI = {
             }
 
             // Check for assigned users
-            const { count: userCount } = await supabase
+            const { count: userCount } = await supabaseClient
                 .from('users')
                 .select('*', { count: 'exact', head: true })
                 .eq('department_id', id);
@@ -132,13 +132,13 @@ const DepartmentAPI = {
             }
 
             // Get old value for audit
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('departments')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('departments')
                 .delete()
                 .eq('id', id);
