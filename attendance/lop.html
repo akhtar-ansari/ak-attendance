@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - LOP Management</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 25px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        .tab:hover {
+            color: #667eea;
+        }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .bulk-actions {
+            background: #f7fafc;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 15px;
+        }
+        .bulk-actions.active {
+            display: flex;
+        }
+        .status-badge-pending { background: #bee3f8; color: #2c5282; }
+        .status-badge-approved { background: #c6f6d5; color: #22543d; }
+        .status-badge-rejected { background: #fed7d7; color: #c53030; }
+        .request-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        .request-labor {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .request-date {
+            color: #666;
+            font-size: 14px;
+        }
+        .request-details {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #555;
+        }
+        .request-remarks {
+            background: #f7fafc;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+        .select-all-wrapper {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 LOP Management</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Tabs -->
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('pending')">
+                    Pending <span id="pendingCount" class="badge badge-info" style="margin-left: 5px;">0</span>
+                </div>
+                <div class="tab" onclick="switchTab('approved')">Approved</div>
+                <div class="tab" onclick="switchTab('rejected')">Rejected</div>
+                <div class="tab" onclick="switchTab('create')" id="createTab">+ Create Request</div>
+            </div>
+
+            <!-- Bulk Actions -->
+            <div class="bulk-actions" id="bulkActions">
+                <span><strong id="selectedCount">0</strong> selected</span>
+                <button type="button" class="btn btn-success btn-sm" onclick="bulkApprove()">✅ Approve Selected</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="bulkReject()">❌ Reject Selected</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear Selection</button>
+            </div>
+
+            <!-- Pending Tab -->
+            <div class="tab-content active" id="pendingTab">
+                <div class="select-all-wrapper" id="selectAllWrapper" style="display: none;">
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                        <span>Select All</span>
+                    </label>
+                </div>
+                <div id="pendingList">
+                    <div class="text-center p-20 text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Approved Tab -->
+            <div class="tab-content" id="approvedTab">
+                <div id="approvedList">
+                    <div class="text-center p-20 text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Rejected Tab -->
+            <div class="tab-content" id="rejectedTab">
+                <div id="rejectedList">
+                    <div class="text-center p-20 text-muted">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Create Request Tab -->
+            <div class="tab-content" id="createTab">
+                <div class="card">
+                    <div class="card-body">
+                        <h3 style="margin-bottom: 20px;">Create LOP Request</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Labor *</label>
+                                <select id="reqLabor" class="form-control" required>
+                                    <option value="">-- Select Labor --</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Date *</label>
+                                <input type="date" id="reqDate" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Current Status</label>
+                                <select id="reqAutoStatus" class="form-control">
+                                    <option value="A">Absent (A)</option>
+                                    <option value="H">Half Day (H)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Requested Status *</label>
+                                <select id="reqRequestedStatus" class="form-control" required>
+                                    <option value="H">Half Day (H)</option>
+                                    <option value="P">Present (P)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Remarks / Reason *</label>
+                            <textarea id="reqRemarks" class="form-control" rows="3" placeholder="e.g., Forgot to punch, Biometric not working, Left early due to sickness..." required></textarea>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="createRequest()">📤 Submit Request</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Reason Modal -->
+    <div class="modal-overlay" id="rejectModal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Reject LOP Request</h2>
+                <button type="button" class="modal-close" onclick="closeRejectModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rejectId">
+                <div class="form-group">
+                    <label>Reason for Rejection (Optional)</label>
+                    <textarea id="rejectReason" class="form-control" rows="3" placeholder="Enter reason..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeRejectModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmReject()">❌ Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/labor-api.js"></script>
+    <script src="../js/api/lop-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        let pendingRequests = [];
+        let approvedRequests = [];
+        let rejectedRequests = [];
+        let laborers = [];
+        let selectedIds = new Set();
+
+        // Check if user can approve (admin/super_admin only)
+        const canApprove = session.role === 'super_admin' || session.role === 'admin';
+
+        // Hide create tab for supervisors if needed (supervisors can create)
+        // All roles can create requests
+
+        // Load data
+        async function loadData() {
+            try {
+                SyncIndicator.show('Loading data...');
+
+                // Load laborers for create form
+                const laborResult = await LaborAPI.getActive();
+                if (laborResult.success) {
+                    laborers = laborResult.data;
+                    populateLaborDropdown();
+                }
+
+                // Load LOP requests
+                await loadRequests();
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load data: ' + error.message);
+            }
+        }
+
+        // Load requests
+        async function loadRequests() {
+            const [pending, approved, rejected] = await Promise.all([
+                LOPAPI.getAll('pending'),
+                LOPAPI.getAll('approved'),
+                LOPAPI.getAll('rejected')
+            ]);
+
+            pendingRequests = pending.success ? pending.data : [];
+            approvedRequests = approved.success ? approved.data : [];
+            rejectedRequests = rejected.success ? rejected.data : [];
+
+            document.getElementById('pendingCount').textContent = pendingRequests.length;
+
+            renderPendingList();
+            renderApprovedList();
+            renderRejectedList();
+        }
+
+        // Populate labor dropdown
+        function populateLaborDropdown() {
+            const select = document.getElementById('reqLabor');
+            select.innerHTML = '<option value="">-- Select Labor --</option>';
+            
+            laborers.forEach(labor => {
+                select.innerHTML += `<option value="${labor.labor_id}" data-dept="${labor.department_id}">${labor.labor_id} - ${labor.name}</option>`;
+            });
+        }
+
+        // Switch tab
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+
+            // Show/hide bulk actions and select all
+            if (tabName === 'pending' && canApprove && pendingRequests.length > 0) {
+                document.getElementById('selectAllWrapper').style.display = 'block';
+            } else {
+                document.getElementById('selectAllWrapper').style.display = 'none';
+                document.getElementById('bulkActions').classList.remove('active');
+            }
+        }
+
+        // Render pending list
+        function renderPendingList() {
+            const container = document.getElementById('pendingList');
+
+            if (pendingRequests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">✅</div>
+                        <h3>No Pending Requests</h3>
+                        <p>All LOP requests have been processed.</p>
+                    </div>
+                `;
+                document.getElementById('selectAllWrapper').style.display = 'none';
+                return;
+            }
+
+            if (canApprove) {
+                document.getElementById('selectAllWrapper').style.display = 'block';
+            }
+
+            container.innerHTML = pendingRequests.map(req => `
+                <div class="request-card">
+                    <div class="request-header">
+                        <div>
+                            ${canApprove ? `<label class="checkbox-wrapper" style="margin-bottom: 8px;">
+                                <input type="checkbox" class="request-checkbox" value="${req.id}" onchange="updateSelection()">
+                                <span></span>
+                            </label>` : ''}
+                            <div class="request-labor">${req.laborers?.name || req.labor_id}</div>
+                            <div class="request-date">${req.labor_id} | ${DateUtils.formatDate(req.date)}</div>
+                        </div>
+                        <span class="badge status-badge-pending">Pending</span>
+                    </div>
+                    <div class="request-details">
+                        <span>📊 Current: <strong>${req.auto_status}</strong></span>
+                        <span>➡️ Requested: <strong>${req.requested_status}</strong></span>
+                        <span>👤 By: ${req.requester?.name || 'System'}</span>
+                    </div>
+                    ${req.remarks ? `<div class="request-remarks">💬 ${req.remarks}</div>` : ''}
+                    ${canApprove ? `
+                        <div>
+                            <button class="btn btn-sm btn-success" onclick="approveRequest('${req.id}')">✅ Approve</button>
+                            <button class="btn btn-sm btn-danger" onclick="showRejectModal('${req.id}')">❌ Reject</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Render approved list
+        function renderApprovedList() {
+            const container = document.getElementById('approvedList');
+
+            if (approvedRequests.length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><h3>No Approved Requests</h3></div>`;
+                return;
+            }
+
+            container.innerHTML = approvedRequests.map(req => `
+                <div class="request-card">
+                    <div class="request-header">
+                        <div>
+                            <div class="request-labor">${req.laborers?.name || req.labor_id}</div>
+                            <div class="request-date">${req.labor_id} | ${DateUtils.formatDate(req.date)}</div>
+                        </div>
+                        <span class="badge status-badge-approved">Approved</span>
+                    </div>
+                    <div class="request-details">
+                        <span>📊 ${req.auto_status} ➡️ ${req.requested_status}</span>
+                        <span>✅ By: ${req.approver?.name || 'Unknown'}</span>
+                        <span>📅 ${DateUtils.formatDate(req.approved_at)}</span>
+                    </div>
+                    ${req.remarks ? `<div class="request-remarks">💬 ${req.remarks}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Render rejected list
+        function renderRejectedList() {
+            const container = document.getElementById('rejectedList');
+
+            if (rejectedRequests.length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><h3>No Rejected Requests</h3></div>`;
+                return;
+            }
+
+            container.innerHTML = rejectedRequests.map(req => `
+                <div class="request-card">
+                    <div class="request-header">
+                        <div>
+                            <div class="request-labor">${req.laborers?.name || req.labor_id}</div>
+                            <div class="request-date">${req.labor_id} | ${DateUtils.formatDate(req.date)}</div>
+                        </div>
+                        <span class="badge status-badge-rejected">Rejected</span>
+                    </div>
+                    <div class="request-details">
+                        <span>📊 ${req.auto_status} ➡️ ${req.requested_status}</span>
+                        <span>❌ By: ${req.approver?.name || 'Unknown'}</span>
+                    </div>
+                    ${req.rejection_reason ? `<div class="request-remarks" style="background: #fff5f5;">❌ Reason: ${req.rejection_reason}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Create request
+        async function createRequest() {
+            const laborId = document.getElementById('reqLabor').value;
+            const date = document.getElementById('reqDate').value;
+            const autoStatus = document.getElementById('reqAutoStatus').value;
+            const requestedStatus = document.getElementById('reqRequestedStatus').value;
+            const remarks = document.getElementById('reqRemarks').value.trim();
+
+            if (!laborId || !date || !remarks) {
+                Toast.error('Please fill all required fields');
+                return;
+            }
+
+            const labor = laborers.find(l => l.labor_id === laborId);
+
+            try {
+                SyncIndicator.show('Creating request...');
+
+                const result = await LOPAPI.create({
+                    laborId,
+                    departmentId: labor.department_id,
+                    date,
+                    autoStatus,
+                    requestedStatus,
+                    remarks
+                });
+
+                if (result.success) {
+                    Toast.success('LOP request created!');
+                    document.getElementById('reqLabor').value = '';
+                    document.getElementById('reqDate').value = '';
+                    document.getElementById('reqRemarks').value = '';
+                    await loadRequests();
+                    switchTab('pending');
+                    document.querySelector('.tab').click();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed: ' + error.message);
+            }
+        }
+
+        // Approve single request
+        async function approveRequest(id) {
+            try {
+                SyncIndicator.show('Approving...');
+                const result = await LOPAPI.approve(id);
+                if (result.success) {
+                    Toast.success('Request approved!');
+                    await loadRequests();
+                } else {
+                    throw new Error(result.error);
+                }
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed: ' + error.message);
+            }
+        }
+
+        // Show reject modal
+        function showRejectModal(id) {
+            document.getElementById('rejectId').value = id;
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('rejectModal').classList.add('active');
+        }
+
+        // Close reject modal
+        function closeRejectModal() {
+            document.getElementById('rejectModal').classList.remove('active');
+        }
+
+        // Confirm reject
+        async function confirmReject() {
+            const id = document.getElementById('rejectId').value;
+            const reason = document.getElementById('rejectReason').value.trim();
+
+            try {
+                SyncIndicator.show('Rejecting...');
+                const result = await LOPAPI.reject(id, reason);
+                if (result.success) {
+                    Toast.success('Request rejected!');
+                    closeRejectModal();
+                    await loadRequests();
+                } else {
+                    throw new Error(result.error);
+                }
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed: ' + error.message);
+            }
+        }
+
+        // Selection functions
+        function updateSelection() {
+            selectedIds.clear();
+            document.querySelectorAll('.request-checkbox:checked').forEach(cb => {
+                selectedIds.add(cb.value);
+            });
+            
+            document.getElementById('selectedCount').textContent = selectedIds.size;
+            
+            if (selectedIds.size > 0) {
+                document.getElementById('bulkActions').classList.add('active');
+            } else {
+                document.getElementById('bulkActions').classList.remove('active');
+            }
+        }
+
+        function toggleSelectAll() {
+            const checked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('.request-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+            updateSelection();
+        }
+
+        function clearSelection() {
+            document.getElementById('selectAll').checked = false;
+            document.querySelectorAll('.request-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            selectedIds.clear();
+            document.getElementById('bulkActions').classList.remove('active');
+        }
+
+        // Bulk approve
+        async function bulkApprove() {
+            if (selectedIds.size === 0) return;
+
+            if (!confirm(`Approve ${selectedIds.size} requests?`)) return;
+
+            try {
+                SyncIndicator.show('Approving...');
+                const result = await LOPAPI.bulkApprove(Array.from(selectedIds));
+                Toast.success(`Approved: ${result.success}, Failed: ${result.failed}`);
+                clearSelection();
+                await loadRequests();
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Bulk approve failed');
+            }
+        }
+
+        // Bulk reject
+        async function bulkReject() {
+            if (selectedIds.size === 0) return;
+
+            const reason = prompt('Enter rejection reason (optional):');
+            if (reason === null) return; // Cancelled
+
+            try {
+                SyncIndicator.show('Rejecting...');
+                const result = await LOPAPI.bulkReject(Array.from(selectedIds), reason);
+                Toast.success(`Rejected: ${result.success}, Failed: ${result.failed}`);
+                clearSelection();
+                await loadRequests();
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Bulk reject failed');
+            }
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

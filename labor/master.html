@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Labor Master</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .face-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .face-status.enrolled { color: #48bb78; }
+        .face-status.not-enrolled { color: #e53e3e; }
+        .face-status.needs-reenroll { color: #ed8936; }
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-bar select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👥 Labor Master</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" onclick="showAddModal()" id="addBtn">➕ Add Labor</button>
+                <button type="button" class="btn btn-success" onclick="location.href='import.html'" id="importBtn">📤 Import CSV</button>
+                <button type="button" class="btn btn-secondary" onclick="exportToCSV()">📥 Export CSV</button>
+            </div>
+            <div class="filter-bar">
+                <select id="departmentFilter" onchange="applyFilters()">
+                    <option value="">All Departments</option>
+                </select>
+                <select id="statusFilter" onchange="applyFilters()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+                <select id="faceFilter" onchange="applyFilters()">
+                    <option value="">Face: All</option>
+                    <option value="enrolled">Enrolled</option>
+                    <option value="not-enrolled">Not Enrolled</option>
+                    <option value="needs-reenroll">Needs Re-enrollment</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search by Name, Iqama, or Labor ID..." onkeyup="applyFilters()">
+        </div>
+
+        <div class="content">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Labor ID</th>
+                            <th>Name</th>
+                            <th>Iqama</th>
+                            <th>Date of Joining</th>
+                            <th>Nationality</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Face</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="laborTable">
+                        <tr>
+                            <td colspan="9" class="text-center p-20">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="laborModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Labor</h2>
+                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editLaborId">
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Name *</label>
+                        <input type="text" id="laborName" class="form-control" placeholder="Full name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Iqama Number *</label>
+                        <input type="text" id="laborIqama" class="form-control" placeholder="e.g., 1234567890" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Date of Joining *</label>
+                        <input type="date" id="laborDOJ" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Nationality *</label>
+                        <input type="text" id="laborNationality" class="form-control" placeholder="e.g., Indian" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Department *</label>
+                        <select id="laborDepartment" class="form-control" required>
+                            <option value="">-- Select Department --</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="laborStatus" class="form-control">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveLabor()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/utils/csv-handler.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/department-api.js"></script>
+    <script src="../js/api/labor-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        let laborers = [];
+        let departments = [];
+        let filteredLaborers = [];
+
+        // Check permissions for add/import
+        function checkPermissions() {
+            if (session.role === 'supervisor') {
+                // Supervisors can view but not add/import
+                document.getElementById('addBtn').style.display = 'none';
+                document.getElementById('importBtn').style.display = 'none';
+            }
+        }
+
+        // Load data
+        async function loadData() {
+            try {
+                SyncIndicator.show('Loading data...');
+
+                // Load departments
+                const deptResult = await DepartmentAPI.getActive();
+                if (deptResult.success) {
+                    departments = deptResult.data;
+                    populateDepartmentDropdowns();
+                }
+
+                // Load laborers
+                const laborResult = await LaborAPI.getAll();
+                if (laborResult.success) {
+                    laborers = laborResult.data;
+                    filteredLaborers = [...laborers];
+                    renderTable();
+                } else {
+                    throw new Error(laborResult.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load data: ' + error.message);
+                document.getElementById('laborTable').innerHTML = `
+                    <tr><td colspan="9" class="text-center p-20 text-danger">
+                        ❌ Failed to load. Check internet connection.
+                    </td></tr>
+                `;
+            }
+        }
+
+        // Populate department dropdowns
+        function populateDepartmentDropdowns() {
+            const filterSelect = document.getElementById('departmentFilter');
+            const formSelect = document.getElementById('laborDepartment');
+
+            // Filter dropdown - show all for super admin
+            filterSelect.innerHTML = '<option value="">All Departments</option>';
+            if (session.role === 'super_admin') {
+                departments.forEach(dept => {
+                    filterSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+                });
+            }
+
+            // Form dropdown
+            formSelect.innerHTML = '<option value="">-- Select Department --</option>';
+            departments.forEach(dept => {
+                // For non-super-admin, only show their department
+                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                    formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
+                }
+            });
+
+            // Pre-select department for non-super-admin
+            if (session.role !== 'super_admin' && session.departmentId) {
+                formSelect.value = session.departmentId;
+            }
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const deptFilter = document.getElementById('departmentFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            const faceFilter = document.getElementById('faceFilter').value;
+
+            filteredLaborers = laborers.filter(labor => {
+                // Search filter
+                const matchSearch = !search || 
+                    labor.labor_id.toLowerCase().includes(search) ||
+                    labor.name.toLowerCase().includes(search) ||
+                    labor.iqama_number.includes(search);
+
+                // Department filter
+                const matchDept = !deptFilter || labor.department_id === deptFilter;
+
+                // Status filter
+                const matchStatus = !statusFilter || labor.status === statusFilter;
+
+                // Face filter
+                let matchFace = true;
+                if (faceFilter === 'enrolled') matchFace = labor.face_enrolled && !labor.needs_reenrollment;
+                else if (faceFilter === 'not-enrolled') matchFace = !labor.face_enrolled;
+                else if (faceFilter === 'needs-reenroll') matchFace = labor.needs_reenrollment;
+
+                return matchSearch && matchDept && matchStatus && matchFace;
+            });
+
+            renderTable();
+        }
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('laborTable');
+
+            if (filteredLaborers.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="9" class="text-center p-20 text-muted">
+                        No laborers found. ${session.role !== 'supervisor' ? 'Click "Add Labor" to create one.' : ''}
+                    </td></tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filteredLaborers.map(labor => {
+                // Face status
+                let faceHtml = '';
+                if (labor.needs_reenrollment) {
+                    faceHtml = `<span class="face-status needs-reenroll">⚠️ Re-enroll</span>`;
+                } else if (labor.face_enrolled) {
+                    faceHtml = `<span class="face-status enrolled">✓ Enrolled</span>`;
+                } else {
+                    faceHtml = `<span class="face-status not-enrolled">✗ Not Enrolled</span>`;
+                }
+
+                // Action buttons
+                let actions = '';
+                
+                // Enroll/Re-enroll button
+                if (!labor.face_enrolled || labor.needs_reenrollment) {
+                    actions += `<button class="btn btn-sm btn-success" onclick="enrollFace('${labor.labor_id}')">📸 Enroll</button> `;
+                } else {
+                    actions += `<button class="btn btn-sm btn-warning" onclick="enrollFace('${labor.labor_id}')">🔄 Re-enroll</button> `;
+                }
+
+                // Edit/Delete for admin/super_admin
+                if (session.role !== 'supervisor') {
+                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️</button> `;
+                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️</button>`;
+                }
+
+                return `
+                    <tr>
+                        <td><strong>${labor.labor_id}</strong></td>
+                        <td>${labor.name}</td>
+                        <td>${labor.iqama_number}</td>
+                        <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
+                        <td>${labor.nationality}</td>
+                        <td>${labor.departments?.name || '-'}</td>
+                        <td>
+                            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
+                                ${labor.status}
+                            </span>
+                        </td>
+                        <td>${faceHtml}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Show add modal
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Labor';
+            document.getElementById('editLaborId').value = '';
+            document.getElementById('laborName').value = '';
+            document.getElementById('laborIqama').value = '';
+            document.getElementById('laborIqama').disabled = false;
+            document.getElementById('laborDOJ').value = '';
+            document.getElementById('laborNationality').value = '';
+            document.getElementById('laborStatus').value = 'active';
+            
+            // Pre-select department for non-super-admin
+            if (session.role !== 'super_admin' && session.departmentId) {
+                document.getElementById('laborDepartment').value = session.departmentId;
+            } else {
+                document.getElementById('laborDepartment').value = '';
+            }
+
+            document.getElementById('laborModal').classList.add('active');
+        }
+
+        // Edit labor
+        function editLabor(laborId) {
+            const labor = laborers.find(l => l.labor_id === laborId);
+            if (!labor) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Labor';
+            document.getElementById('editLaborId').value = labor.labor_id;
+            document.getElementById('laborName').value = labor.name;
+            document.getElementById('laborIqama').value = labor.iqama_number;
+            document.getElementById('laborIqama').disabled = true; // Can't change Iqama
+            document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
+            document.getElementById('laborNationality').value = labor.nationality;
+            document.getElementById('laborDepartment').value = labor.department_id;
+            document.getElementById('laborStatus').value = labor.status;
+
+            document.getElementById('laborModal').classList.add('active');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('laborModal').classList.remove('active');
+        }
+
+        // Save labor
+        async function saveLabor() {
+            const editLaborId = document.getElementById('editLaborId').value;
+            const name = document.getElementById('laborName').value.trim();
+            const iqamaNumber = document.getElementById('laborIqama').value.trim();
+            const dateOfJoining = document.getElementById('laborDOJ').value;
+            const nationality = document.getElementById('laborNationality').value.trim();
+            const departmentId = document.getElementById('laborDepartment').value;
+            const status = document.getElementById('laborStatus').value;
+
+            // Validation
+            if (!name || !iqamaNumber || !dateOfJoining || !nationality || !departmentId) {
+                Toast.error('Please fill all required fields');
+                return;
+            }
+
+            try {
+                SyncIndicator.show(editLaborId ? 'Updating...' : 'Creating...');
+
+                let result;
+                if (editLaborId) {
+                    result = await LaborAPI.update(editLaborId, {
+                        name,
+                        dateOfJoining,
+                        nationality,
+                        departmentId,
+                        status
+                    });
+                } else {
+                    result = await LaborAPI.create({
+                        name,
+                        iqamaNumber,
+                        dateOfJoining,
+                        nationality,
+                        departmentId,
+                        status
+                    });
+                }
+
+                if (result.success) {
+                    Toast.success(editLaborId ? 'Labor updated!' : 'Labor created!');
+                    closeModal();
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to save: ' + error.message);
+            }
+        }
+
+        // Delete labor
+        async function deleteLabor(laborId) {
+            const labor = laborers.find(l => l.labor_id === laborId);
+            
+            if (!confirm(`Delete labor "${labor.name}" (${laborId})?\n\nThis will set the labor as inactive.`)) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Deleting...');
+
+                const result = await LaborAPI.delete(laborId, false); // Soft delete
+
+                if (result.success) {
+                    Toast.success('Labor deleted!');
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
+        // Enroll face
+        function enrollFace(laborId) {
+            window.location.href = `enroll.html?id=${laborId}`;
+        }
+
+        // Export to CSV
+        function exportToCSV() {
+            if (filteredLaborers.length === 0) {
+                Toast.error('No data to export');
+                return;
+            }
+
+            const data = filteredLaborers.map(l => ({
+                'Labor ID': l.labor_id,
+                'Name': l.name,
+                'Iqama Number': l.iqama_number,
+                'Date of Joining': DateUtils.formatDate(l.date_of_joining),
+                'Nationality': l.nationality,
+                'Department': l.departments?.name || '',
+                'Status': l.status,
+                'Face Enrolled': l.face_enrolled ? 'Yes' : 'No'
+            }));
+
+            CSVHandler.exportToCSV(data, 'labor_master');
+            Toast.success('CSV exported!');
+        }
+
+        // Initialize
+        checkPermissions();
+        loadData();
+    </script>
+</body>
+</html>

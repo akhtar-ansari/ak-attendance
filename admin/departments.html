@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Departments</title>
+    <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏛️ Department Management</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" onclick="showAddModal()">➕ Add Department</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Department Name</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="departmentTable">
+                        <tr>
+                            <td colspan="5" class="text-center p-20">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="departmentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Department</h2>
+                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label>Department Name *</label>
+                    <input type="text" id="deptName" class="form-control" placeholder="e.g., Warehouse" required>
+                </div>
+                <div class="form-group">
+                    <label>Code * (Short code, uppercase)</label>
+                    <input type="text" id="deptCode" class="form-control" placeholder="e.g., WH" maxlength="10" required>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="deptStatus" class="form-control">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveDepartment()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/department-api.js"></script>
+
+    <script>
+        // Require Super Admin
+        if (!AUTH.requireRole(['super_admin'])) {
+            // Redirect handled by requireRole
+        }
+
+        let departments = [];
+
+        // Load departments
+        async function loadDepartments() {
+            try {
+                SyncIndicator.show('Loading departments...');
+                
+                const result = await DepartmentAPI.getAll();
+                
+                if (result.success) {
+                    departments = result.data;
+                    renderTable();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load departments: ' + error.message);
+                document.getElementById('departmentTable').innerHTML = `
+                    <tr><td colspan="5" class="text-center p-20 text-danger">
+                        ❌ Failed to load. Check internet connection.
+                    </td></tr>
+                `;
+            }
+        }
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('departmentTable');
+
+            if (departments.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="5" class="text-center p-20 text-muted">
+                        No departments found. Click "Add Department" to create one.
+                    </td></tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = departments.map(dept => `
+                <tr>
+                    <td><strong>${dept.code}</strong></td>
+                    <td>${dept.name}</td>
+                    <td>
+                        <span class="badge badge-${dept.status === 'active' ? 'active' : 'inactive'}">
+                            ${dept.status}
+                        </span>
+                    </td>
+                    <td>${DateUtils.formatDate(dept.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editDepartment('${dept.id}')">✏️ Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteDepartment('${dept.id}')">🗑️ Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Show add modal
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Department';
+            document.getElementById('editId').value = '';
+            document.getElementById('deptName').value = '';
+            document.getElementById('deptCode').value = '';
+            document.getElementById('deptStatus').value = 'active';
+            document.getElementById('departmentModal').classList.add('active');
+        }
+
+        // Edit department
+        function editDepartment(id) {
+            const dept = departments.find(d => d.id === id);
+            if (!dept) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Department';
+            document.getElementById('editId').value = dept.id;
+            document.getElementById('deptName').value = dept.name;
+            document.getElementById('deptCode').value = dept.code;
+            document.getElementById('deptStatus').value = dept.status;
+            document.getElementById('departmentModal').classList.add('active');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('departmentModal').classList.remove('active');
+        }
+
+        // Save department
+        async function saveDepartment() {
+            const editId = document.getElementById('editId').value;
+            const name = document.getElementById('deptName').value.trim();
+            const code = document.getElementById('deptCode').value.trim().toUpperCase();
+            const status = document.getElementById('deptStatus').value;
+
+            if (!name || !code) {
+                Toast.error('Please fill all required fields');
+                return;
+            }
+
+            try {
+                SyncIndicator.show(editId ? 'Updating...' : 'Creating...');
+
+                let result;
+                if (editId) {
+                    result = await DepartmentAPI.update(editId, { name, code, status });
+                } else {
+                    result = await DepartmentAPI.create({ name, code, status });
+                }
+
+                if (result.success) {
+                    Toast.success(editId ? 'Department updated!' : 'Department created!');
+                    closeModal();
+                    loadDepartments();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to save: ' + error.message);
+            }
+        }
+
+        // Delete department
+        async function deleteDepartment(id) {
+            const dept = departments.find(d => d.id === id);
+            if (!confirm(`Delete department "${dept.name}"?\n\nThis cannot be undone if no laborers or users are assigned.`)) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Deleting...');
+
+                const result = await DepartmentAPI.delete(id);
+
+                if (result.success) {
+                    Toast.success('Department deleted!');
+                    loadDepartments();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
+        // Initialize
+        loadDepartments();
+    </script>
+</body>
+</html>

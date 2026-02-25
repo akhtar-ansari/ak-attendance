@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Dashboard</title>
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .tile-purple { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .tile-blue { background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%); }
+        .tile-green { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); }
+        .tile-orange { background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); }
+        .tile-red { background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%); }
+        .tile-teal { background: linear-gradient(135deg, #38b2ac 0%, #319795 100%); }
+        .tile-pink { background: linear-gradient(135deg, #ed64a6 0%, #d53f8c 100%); }
+        .stats-section {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 25px;
+        }
+        .stats-section h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .quick-actions {
+            margin-top: 30px;
+        }
+        .quick-actions h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .department-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 AK Attendance System</h1>
+            <div class="header-actions">
+                <div class="user-info">
+                    <span id="userInfo"></span>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="AUTH.logout()">Logout</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="welcomeSection" class="mb-20">
+                <h2>Welcome, <span id="userName"></span>!</h2>
+                <p class="text-muted" id="roleInfo"></p>
+            </div>
+
+            <!-- Navigation Tiles -->
+            <div class="dashboard-grid" id="navigationTiles">
+                <!-- Tiles will be rendered based on role -->
+            </div>
+
+            <!-- Statistics Section -->
+            <div class="stats-section">
+                <h3>📈 Today's Statistics</h3>
+                <div class="stats-grid" id="statsContainer">
+                    <!-- Stats will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions" id="quickActions">
+                <!-- Quick actions based on role -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="js/config/supabase.js"></script>
+    <script src="js/auth/auth.js"></script>
+    <script src="js/utils/date-utils.js"></script>
+    <script src="js/ui/sync-indicator.js"></script>
+    <script src="js/ui/toast.js"></script>
+    <script src="js/api/report-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = 'index.html';
+        }
+
+        const session = AUTH.getSession();
+
+        // Set user info
+        document.getElementById('userName').textContent = session.name;
+        document.getElementById('userInfo').textContent = `${session.name} (${session.role.replace('_', ' ').toUpperCase()})`;
+        
+        const roleLabels = {
+            'super_admin': 'Super Administrator - Full Access',
+            'admin': 'Department Administrator',
+            'supervisor': 'Warehouse Supervisor'
+        };
+        document.getElementById('roleInfo').textContent = roleLabels[session.role] || session.role;
+
+        // Render navigation tiles based on role
+        function renderNavigationTiles() {
+            const tiles = [];
+
+            // Super Admin sees all
+            if (session.role === 'super_admin') {
+                tiles.push(
+                    { title: 'Departments', desc: 'Manage departments', icon: '🏛️', link: 'admin/departments.html', class: 'tile-purple' },
+                    { title: 'Users', desc: 'Manage users', icon: '👤', link: 'admin/users.html', class: 'tile-pink' }
+                );
+            }
+
+            // Admin and Super Admin
+            if (session.role === 'super_admin' || session.role === 'admin') {
+                tiles.push(
+                    { title: 'Labor Master', desc: 'Manage laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
+                    { title: 'LOP Approvals', desc: 'Approve/reject LOP', icon: '✅', link: 'attendance/lop.html', class: 'tile-orange' }
+                );
+            }
+
+            // Supervisor
+            if (session.role === 'supervisor') {
+                tiles.push(
+                    { title: 'Labor Master', desc: 'View laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
+                    { title: 'LOP Requests', desc: 'Request LOP approval', icon: '📝', link: 'attendance/lop.html', class: 'tile-orange' }
+                );
+            }
+
+            // Common tiles for all roles
+            tiles.push(
+                { title: 'Reports', desc: 'View attendance', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
+                { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
+                { title: 'Punch Locations', desc: 'Manage locations', icon: '📍', link: 'attendance/punch-locations.html', class: 'tile-red' },
+                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: 'punch/index.html', class: 'tile-orange', target: '_blank' }
+            );
+
+            const container = document.getElementById('navigationTiles');
+            container.innerHTML = tiles.map(tile => `
+                <div class="dashboard-tile ${tile.class}" onclick="${tile.target ? `window.open('${tile.link}', '_blank')` : `location.href='${tile.link}'`}">
+                    <div class="icon">${tile.icon}</div>
+                    <h3>${tile.title}</h3>
+                    <p>${tile.desc}</p>
+                </div>
+            `).join('');
+        }
+
+        // Load statistics
+        async function loadStats() {
+            const container = document.getElementById('statsContainer');
+            
+            container.innerHTML = `
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Total Laborers</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Active</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Face Enrolled</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Today Present</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Today Half Day</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Today Absent</div></div>
+                <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">Pending LOP</div></div>
+            `;
+
+            try {
+                SyncIndicator.show('Loading statistics...');
+                
+                const result = await ReportAPI.getDashboardStats();
+                
+                if (result.success) {
+                    const stats = result.data;
+                    container.innerHTML = `
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #667eea;">${stats.totalLaborers}</div>
+                            <div class="stat-label">Total Laborers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #48bb78;">${stats.activeLaborers}</div>
+                            <div class="stat-label">Active</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #4299e1;">${stats.faceEnrolled}</div>
+                            <div class="stat-label">Face Enrolled</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #38a169;">${stats.todayPresent}</div>
+                            <div class="stat-label">Today Present</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #ed8936;">${stats.todayHalfDay}</div>
+                            <div class="stat-label">Today Half Day</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #e53e3e;">${stats.todayAbsent}</div>
+                            <div class="stat-label">Today Absent</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #d53f8c;">${stats.pendingLOP}</div>
+                            <div class="stat-label">Pending LOP</div>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                console.error('Error loading stats:', error);
+                container.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #e53e3e;">
+                        ❌ Failed to load statistics. Check internet connection.
+                    </div>
+                `;
+            }
+        }
+
+        // Render quick actions
+        function renderQuickActions() {
+            const container = document.getElementById('quickActions');
+            
+            let actions = [];
+            
+            if (session.role === 'super_admin' || session.role === 'admin') {
+                actions.push(
+                    `<button class="btn btn-primary" onclick="location.href='labor/master.html'">➕ Add New Labor</button>`,
+                    `<button class="btn btn-success" onclick="location.href='labor/import.html'">📤 Import Laborers</button>`
+                );
+            }
+            
+            actions.push(
+                `<button class="btn btn-secondary" onclick="location.href='reports/daily.html'">📊 Generate Report</button>`,
+                `<button class="btn btn-warning" onclick="window.open('punch/index.html', '_blank')">👆 Open Punch Terminal</button>`
+            );
+
+            if (actions.length > 0) {
+                container.innerHTML = `
+                    <h3>⚡ Quick Actions</h3>
+                    <div class="action-buttons">
+                        ${actions.join('')}
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize
+        renderNavigationTiles();
+        renderQuickActions();
+        loadStats();
+    </script>
+</body>
+</html>

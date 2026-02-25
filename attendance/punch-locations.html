@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Punch Locations</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .location-card {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+        .location-card.inactive {
+            border-left-color: #cbd5e0;
+            opacity: 0.7;
+        }
+        .location-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        .location-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        .location-dept {
+            font-size: 12px;
+            color: #667eea;
+            margin-top: 4px;
+        }
+        .location-coords {
+            font-size: 13px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .location-radius {
+            display: inline-block;
+            background: #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            color: #4a5568;
+            margin-top: 8px;
+        }
+        .get-location-btn {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📍 Punch Locations</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" onclick="showAddModal()" id="addBtn">➕ Add Location</button>
+            </div>
+            <div>
+                <select id="departmentFilter" class="form-control" onchange="applyFilter()" style="min-width: 200px;">
+                    <option value="">All Departments</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="locationsContainer">
+                <div class="text-center p-20 text-muted">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="locationModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Location</h2>
+                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                
+                <div class="form-group">
+                    <label>Location Name *</label>
+                    <input type="text" id="locName" class="form-control" placeholder="e.g., Kaden Warehouse" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Department *</label>
+                    <select id="locDepartment" class="form-control" required>
+                        <option value="">-- Select Department --</option>
+                    </select>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Latitude *</label>
+                        <input type="number" step="0.0000001" id="locLat" class="form-control" placeholder="e.g., 24.512233" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Longitude *</label>
+                        <input type="number" step="0.0000001" id="locLng" class="form-control" placeholder="e.g., 46.949231" required>
+                    </div>
+                </div>
+                
+                <button type="button" class="btn btn-secondary get-location-btn" onclick="getCurrentLocation()">
+                    📍 Get Current Location
+                </button>
+                
+                <div class="form-grid" style="margin-top: 20px;">
+                    <div class="form-group">
+                        <label>Radius (meters) *</label>
+                        <input type="number" id="locRadius" class="form-control" value="100" min="10" max="500" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="locStatus" class="form-control">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveLocation()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/department-api.js"></script>
+    <script src="../js/api/punch-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        let locations = [];
+        let departments = [];
+        let filteredLocations = [];
+
+        // Load data
+        async function loadData() {
+            try {
+                SyncIndicator.show('Loading data...');
+
+                // Load departments
+                const deptResult = await DepartmentAPI.getActive();
+                if (deptResult.success) {
+                    departments = deptResult.data;
+                    populateDepartmentDropdowns();
+                }
+
+                // Load locations
+                const locResult = await PunchAPI.getLocations();
+                if (locResult.success) {
+                    locations = locResult.data;
+                    filteredLocations = [...locations];
+                    renderLocations();
+                } else {
+                    throw new Error(locResult.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load data: ' + error.message);
+            }
+        }
+
+        // Populate department dropdowns
+        function populateDepartmentDropdowns() {
+            const filterSelect = document.getElementById('departmentFilter');
+            const formSelect = document.getElementById('locDepartment');
+
+            filterSelect.innerHTML = '<option value="">All Departments</option>';
+            formSelect.innerHTML = '<option value="">-- Select Department --</option>';
+
+            departments.forEach(dept => {
+                // For filter - show based on role
+                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                    filterSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+                }
+                
+                // For form
+                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                    formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
+                }
+            });
+        }
+
+        // Apply filter
+        function applyFilter() {
+            const deptFilter = document.getElementById('departmentFilter').value;
+
+            filteredLocations = locations.filter(loc => {
+                return !deptFilter || loc.department_id === deptFilter;
+            });
+
+            renderLocations();
+        }
+
+        // Render locations
+        function renderLocations() {
+            const container = document.getElementById('locationsContainer');
+
+            if (filteredLocations.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📍</div>
+                        <h3>No Locations Found</h3>
+                        <p>Click "Add Location" to create a punch location.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredLocations.map(loc => `
+                <div class="location-card ${loc.status === 'inactive' ? 'inactive' : ''}">
+                    <div class="location-header">
+                        <div>
+                            <div class="location-name">${loc.name}</div>
+                            <div class="location-dept">${loc.departments?.name || 'Unknown Department'}</div>
+                        </div>
+                        <div>
+                            <span class="badge badge-${loc.status === 'active' ? 'active' : 'inactive'}">${loc.status}</span>
+                        </div>
+                    </div>
+                    <div class="location-coords">
+                        📍 ${loc.latitude}, ${loc.longitude}
+                    </div>
+                    <div class="location-radius">
+                        Radius: ${loc.radius}m
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-sm btn-primary" onclick="editLocation('${loc.id}')">✏️ Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteLocation('${loc.id}')">🗑️ Delete</button>
+                        <a href="https://www.google.com/maps?q=${loc.latitude},${loc.longitude}" target="_blank" class="btn btn-sm btn-secondary">🗺️ View Map</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Show add modal
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Location';
+            document.getElementById('editId').value = '';
+            document.getElementById('locName').value = '';
+            document.getElementById('locLat').value = '';
+            document.getElementById('locLng').value = '';
+            document.getElementById('locRadius').value = '100';
+            document.getElementById('locStatus').value = 'active';
+
+            // Pre-select department for non-super-admin
+            if (session.role !== 'super_admin' && session.departmentId) {
+                document.getElementById('locDepartment').value = session.departmentId;
+            } else {
+                document.getElementById('locDepartment').value = '';
+            }
+
+            document.getElementById('locationModal').classList.add('active');
+        }
+
+        // Edit location
+        function editLocation(id) {
+            const loc = locations.find(l => l.id === id);
+            if (!loc) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Location';
+            document.getElementById('editId').value = loc.id;
+            document.getElementById('locName').value = loc.name;
+            document.getElementById('locDepartment').value = loc.department_id;
+            document.getElementById('locLat').value = loc.latitude;
+            document.getElementById('locLng').value = loc.longitude;
+            document.getElementById('locRadius').value = loc.radius;
+            document.getElementById('locStatus').value = loc.status;
+
+            document.getElementById('locationModal').classList.add('active');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('locationModal').classList.remove('active');
+        }
+
+        // Get current location
+        function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                Toast.error('Geolocation not supported by your browser');
+                return;
+            }
+
+            Toast.info('Getting current location...');
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    document.getElementById('locLat').value = position.coords.latitude.toFixed(7);
+                    document.getElementById('locLng').value = position.coords.longitude.toFixed(7);
+                    Toast.success('Location captured!');
+                },
+                (error) => {
+                    Toast.error('Could not get location: ' + error.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // Save location
+        async function saveLocation() {
+            const editId = document.getElementById('editId').value;
+            const name = document.getElementById('locName').value.trim();
+            const departmentId = document.getElementById('locDepartment').value;
+            const latitude = parseFloat(document.getElementById('locLat').value);
+            const longitude = parseFloat(document.getElementById('locLng').value);
+            const radius = parseInt(document.getElementById('locRadius').value);
+            const status = document.getElementById('locStatus').value;
+
+            // Validation
+            if (!name || !departmentId || !latitude || !longitude || !radius) {
+                Toast.error('Please fill all required fields');
+                return;
+            }
+
+            if (radius < 10 || radius > 500) {
+                Toast.error('Radius must be between 10 and 500 meters');
+                return;
+            }
+
+            try {
+                SyncIndicator.show(editId ? 'Updating...' : 'Creating...');
+
+                let result;
+                if (editId) {
+                    result = await PunchAPI.updateLocation(editId, {
+                        name, departmentId, latitude, longitude, radius, status
+                    });
+                } else {
+                    result = await PunchAPI.createLocation({
+                        name, departmentId, latitude, longitude, radius, status
+                    });
+                }
+
+                if (result.success) {
+                    Toast.success(editId ? 'Location updated!' : 'Location created!');
+                    closeModal();
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to save: ' + error.message);
+            }
+        }
+
+        // Delete location
+        async function deleteLocation(id) {
+            const loc = locations.find(l => l.id === id);
+            
+            if (!confirm(`Delete location "${loc.name}"?\n\nThis cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Deleting...');
+
+                const result = await PunchAPI.deleteLocation(id);
+
+                if (result.success) {
+                    Toast.success('Location deleted!');
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Punch Terminal</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #000; overflow: hidden; height: 100vh; }
+        
+        .punch-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        
+        .top-bar {
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .logo { font-size: 20px; font-weight: bold; color: #667eea; }
+        .datetime { text-align: right; }
+        .time { font-size: 28px; font-weight: bold; }
+        .date { font-size: 13px; color: #aaa; }
+        
+        .camera-section { flex: 1; position: relative; background: #000; }
+        #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #canvas { display: none; }
+        
+        .face-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -55%);
+            width: 280px;
+            height: 360px;
+            border: 4px solid #48bb78;
+            border-radius: 180px;
+            box-shadow: 0 0 40px rgba(72, 187, 120, 0.4);
+            pointer-events: none;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; box-shadow: 0 0 40px rgba(72, 187, 120, 0.4); }
+            50% { opacity: 1; box-shadow: 0 0 60px rgba(72, 187, 120, 0.6); }
+        }
+        
+        .id-input-panel {
+            position: absolute;
+            top: 12%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            padding: 30px;
+            border-radius: 15px;
+            z-index: 5;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+        }
+        .id-input-panel h2 { color: white; margin-bottom: 20px; font-size: 20px; }
+        .id-input-panel input {
+            width: 100%;
+            padding: 15px;
+            font-size: 20px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            text-align: center;
+            text-transform: uppercase;
+            outline: none;
+        }
+        .id-input-panel input:focus { border-color: #48bb78; }
+        .id-input-panel button {
+            width: 100%;
+            margin-top: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .id-error { color: #f56565; margin-top: 12px; font-size: 14px; display: none; }
+        
+        .location-bar {
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 5;
+        }
+        .location-bar.valid { background: rgba(72, 187, 120, 0.9); }
+        .location-bar.invalid { background: rgba(245, 101, 101, 0.9); }
+        
+        .punch-btn {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            border: 6px solid white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 10;
+            display: none;
+        }
+        .punch-btn:active { transform: translateX(-50%) scale(0.95); }
+        .punch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .status-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 100;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+        }
+        .status-overlay.active { display: flex; }
+        .status-icon { font-size: 80px; margin-bottom: 20px; }
+        .status-title { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
+        .status-time { font-size: 56px; font-weight: bold; margin: 20px 0; }
+        .status-details { font-size: 18px; line-height: 1.8; color: #ccc; }
+        .status-time.success { color: #48bb78; }
+        .status-time.error { color: #f56565; }
+        
+        .hidden { display: none !important; }
+        
+        .no-internet {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(245, 101, 101, 0.95);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+        }
+        .no-internet.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="punch-container">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="logo">🏢 AK ATTENDANCE</div>
+            <div class="datetime">
+                <div class="time" id="currentTime">00:00:00</div>
+                <div class="date" id="currentDate">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Camera Section -->
+        <div class="camera-section">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="face-guide" id="faceGuide"></div>
+
+            <!-- ID Input Panel -->
+            <div class="id-input-panel" id="idInputPanel">
+                <h2>👤 Enter Your Labor ID</h2>
+                <input type="text" id="laborIdInput" placeholder="e.g., L1" maxlength="10" autofocus>
+                <button type="button" onclick="verifyLaborId()">✓ Verify ID</button>
+                <div class="id-error" id="idError"></div>
+            </div>
+
+            <!-- Location Bar -->
+            <div class="location-bar" id="locationBar">📍 Detecting location...</div>
+
+            <!-- Punch Button -->
+            <button type="button" class="punch-btn" id="punchBtn" onclick="processPunch()">PUNCH</button>
+        </div>
+
+        <!-- Status Overlay -->
+        <div class="status-overlay" id="statusOverlay">
+            <div class="status-icon" id="statusIcon">✅</div>
+            <div class="status-title" id="statusTitle">Success</div>
+            <div class="status-time" id="statusTime">08:30</div>
+            <div class="status-details" id="statusDetails"></div>
+        </div>
+
+        <!-- No Internet Warning -->
+        <div class="no-internet" id="noInternet">
+            <div style="font-size: 48px; margin-bottom: 15px;">📡</div>
+            <h2>No Internet Connection</h2>
+            <p style="margin-top: 10px;">Please check your network and refresh.</p>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/utils/photo-utils.js"></script>
+    <script src="../js/api/labor-api.js"></script>
+    <script src="../js/api/punch-api.js"></script>
+
+    <script>
+        // Minimal AUTH object for punch terminal (no login required)
+        const AUTH = {
+            getSession: () => null,
+            getDepartmentFilter: () => null,
+            logAction: async () => {}
+        };
+
+        let modelsLoaded = false;
+        let stream = null;
+        let currentLabor = null;
+        let currentLocation = null;
+        let allLaborers = [];
+        let settings = {};
+
+        // Initialize
+        window.onload = async function() {
+            // Check internet
+            if (!navigator.onLine) {
+                document.getElementById('noInternet').classList.add('active');
+                return;
+            }
+
+            // Start clock
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+
+            // Load data
+            await loadInitialData();
+            
+            // Load face models
+            await loadFaceModels();
+            
+            // Start camera
+            await startCamera();
+            
+            // Detect location
+            detectLocation();
+        };
+
+        // Update date time
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-US', {
+                hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+        }
+
+        // Load initial data
+        async function loadInitialData() {
+            try {
+                // Load all active laborers with face enrolled
+                const result = await LaborAPI.getActive();
+                if (result.success) {
+                    allLaborers = result.data.filter(l => l.face_enrolled);
+                    console.log(`Loaded ${allLaborers.length} laborers with face enrolled`);
+                }
+
+                // Load settings
+                const { data: settingsData } = await supabase.from('settings').select('*');
+                if (settingsData) {
+                    settingsData.forEach(s => settings[s.key] = s.value);
+                }
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            }
+        }
+
+        // Load face models
+        async function loadFaceModels() {
+            try {
+                const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                modelsLoaded = true;
+                console.log('✅ Face models loaded');
+            } catch (error) {
+                console.error('Failed to load face models:', error);
+            }
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+                });
+                document.getElementById('video').srcObject = stream;
+                console.log('✅ Camera started');
+            } catch (error) {
+                console.error('Camera error:', error);
+                showStatus('❌', 'Camera Error', '', 'Camera access denied. Please allow camera permission.', 'error');
+            }
+        }
+
+        // Detect location
+        function detectLocation() {
+            if (!navigator.geolocation) {
+                updateLocationBar('GPS not supported', false);
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+
+                    // We need labor's department to check locations
+                    // For now, show coordinates
+                    window.userCoords = { lat: userLat, lng: userLng };
+                    updateLocationBar(`📍 Location detected`, true);
+                },
+                (error) => {
+                    console.error('Location error:', error);
+                    updateLocationBar('Location unavailable', false);
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // Update location bar
+        function updateLocationBar(text, valid) {
+            const bar = document.getElementById('locationBar');
+            bar.textContent = text;
+            bar.className = 'location-bar ' + (valid ? 'valid' : 'invalid');
+        }
+
+        // Verify Labor ID
+        async function verifyLaborId() {
+            const input = document.getElementById('laborIdInput').value.trim().toUpperCase();
+            const errorEl = document.getElementById('idError');
+
+            if (!input) {
+                showIdError('Please enter Labor ID');
+                return;
+            }
+
+            // Find labor
+            const labor = allLaborers.find(l => l.labor_id.toUpperCase() === input);
+
+            if (!labor) {
+                showIdError('Labor ID not found or face not enrolled');
+                return;
+            }
+
+            // Check if labor has face enrolled
+            if (!labor.face_enrolled || !labor.face_descriptor) {
+                showIdError('Face not enrolled. Please contact supervisor.');
+                return;
+            }
+
+            // Check location for labor's department
+            if (window.userCoords) {
+                const locResult = await PunchAPI.findNearestLocation(
+                    window.userCoords.lat,
+                    window.userCoords.lng,
+                    labor.department_id
+                );
+
+                if (locResult.success) {
+                    currentLocation = locResult.location;
+                    updateLocationBar(`📍 ${currentLocation.name} (${currentLocation.distance}m)`, true);
+                } else {
+                    updateLocationBar('📍 Outside punch area', false);
+                    showIdError('You are outside the authorized punch area for your department.');
+                    return;
+                }
+            } else {
+                showIdError('Location not detected. Please enable GPS.');
+                return;
+            }
+
+            currentLabor = labor;
+            
+            // Hide input, show punch button
+            document.getElementById('idInputPanel').classList.add('hidden');
+            document.getElementById('punchBtn').style.display = 'block';
+        }
+
+        // Show ID error
+        function showIdError(message) {
+            const errorEl = document.getElementById('idError');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => errorEl.style.display = 'none', 4000);
+        }
+
+        // Process punch
+        async function processPunch() {
+            if (!currentLabor || !currentLocation) {
+                showStatus('❌', 'Error', '', 'Please verify your ID first', 'error');
+                return;
+            }
+
+            if (!modelsLoaded) {
+                showStatus('⏳', 'Please Wait', '', 'AI models still loading...', 'error');
+                return;
+            }
+
+            // Check internet
+            if (!navigator.onLine) {
+                showStatus('📡', 'No Internet', '', 'Please check your connection', 'error');
+                return;
+            }
+
+            const punchBtn = document.getElementById('punchBtn');
+            punchBtn.disabled = true;
+
+            showStatus('🔍', 'Verifying', '', 'Analyzing face...', 'info');
+
+            try {
+                // Capture photo
+                const video = document.getElementById('video');
+                const { canvas, blob: photoBlob } = await PhotoUtils.capturePhoto(video, true);
+
+                // Detect face
+                const detection = await faceapi
+                    .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                if (!detection) {
+                    throw new Error('No face detected. Please position your face in the circle.');
+                }
+
+                // Compare with enrolled face
+                const enrolledDescriptor = new Float32Array(currentLabor.face_descriptor);
+                const distance = faceapi.euclideanDistance(enrolledDescriptor, detection.descriptor);
+                const confidence = Math.round((1 - distance) * 100);
+
+                console.log('Face match - Distance:', distance, 'Confidence:', confidence + '%');
+
+                // Check confidence threshold
+                const minConfidence = parseInt(settings.confidence_threshold || '70');
+                const reenrollThreshold = parseInt(settings.reenrollment_threshold || '60');
+
+                if (confidence < minConfidence) {
+                    // Check if needs re-enrollment
+                    if (confidence < reenrollThreshold) {
+                        await LaborAPI.incrementLowConfidence(currentLabor.labor_id);
+                    }
+                    throw new Error(`Face not matched (${confidence}% confidence). Please try again or contact supervisor.`);
+                }
+
+                // Check punch limit
+                const limitCheck = await PunchAPI.checkPunchLimit(currentLabor.labor_id);
+                if (!limitCheck.allowed) {
+                    throw new Error(`Punch limit reached (${limitCheck.max} per day)`);
+                }
+
+                // Determine punch type
+                showStatus('💾', 'Saving', '', 'Recording punch...', 'info');
+                
+                const punchType = await PunchAPI.getNextPunchType(currentLabor.labor_id);
+
+                // Upload photo
+                let photoUrl = null;
+                const uploadResult = await PunchAPI.uploadPhoto(currentLabor.labor_id, photoBlob);
+                if (uploadResult.success) {
+                    photoUrl = uploadResult.url;
+                }
+
+                // Save punch record
+                const now = new Date();
+                const punchData = {
+                    laborId: currentLabor.labor_id,
+                    departmentId: currentLabor.department_id,
+                    date: DateUtils.today(),
+                    time: DateUtils.now(),
+                    type: punchType,
+                    locationId: currentLocation.id,
+                    locationName: currentLocation.name,
+                    confidence: confidence,
+                    photoUrl: photoUrl
+                };
+
+                const saveResult = await PunchAPI.savePunch(punchData);
+
+                if (!saveResult.success) {
+                    throw new Error('Failed to save punch. Please try again.');
+                }
+
+                // Success
+                const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                
+                speak(`${punchType} successful, ${currentLabor.name}`);
+                
+                showStatus(
+                    punchType === 'login' ? '✅' : '👋',
+                    `${punchType.toUpperCase()} Successful`,
+                    timeStr,
+                    `${currentLabor.name}<br>${currentLabor.labor_id}<br>${currentLocation.name}<br>Confidence: ${confidence}%`,
+                    'success'
+                );
+
+                // Reset after 5 seconds
+                setTimeout(() => {
+                    resetTerminal();
+                }, 5000);
+
+            } catch (error) {
+                console.error('Punch error:', error);
+                showStatus('❌', 'Failed', '', error.message, 'error');
+                
+                setTimeout(() => {
+                    document.getElementById('statusOverlay').classList.remove('active');
+                    punchBtn.disabled = false;
+                }, 4000);
+            }
+        }
+
+        // Show status overlay
+        function showStatus(icon, title, time, details, type) {
+            document.getElementById('statusIcon').textContent = icon;
+            document.getElementById('statusTitle').textContent = title;
+            document.getElementById('statusTime').textContent = time;
+            document.getElementById('statusTime').className = 'status-time ' + type;
+            document.getElementById('statusDetails').innerHTML = details;
+            document.getElementById('statusOverlay').classList.add('active');
+        }
+
+        // Speak text
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Reset terminal
+        function resetTerminal() {
+            currentLabor = null;
+            currentLocation = null;
+            document.getElementById('laborIdInput').value = '';
+            document.getElementById('idInputPanel').classList.remove('hidden');
+            document.getElementById('punchBtn').style.display = 'none';
+            document.getElementById('punchBtn').disabled = false;
+            document.getElementById('statusOverlay').classList.remove('active');
+            detectLocation();
+        }
+
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        // Internet status
+        window.addEventListener('online', () => {
+            document.getElementById('noInternet').classList.remove('active');
+            loadInitialData();
+        });
+
+        window.addEventListener('offline', () => {
+            document.getElementById('noInternet').classList.add('active');
+        });
+    </script>
+</body>
+</html>

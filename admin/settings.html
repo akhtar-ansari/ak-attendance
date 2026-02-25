@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Settings</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .settings-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .settings-section h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+        .setting-info {
+            flex: 1;
+        }
+        .setting-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .setting-desc {
+            font-size: 13px;
+            color: #666;
+        }
+        .setting-input {
+            width: 120px;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .setting-input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        .save-bar {
+            position: sticky;
+            bottom: 0;
+            background: white;
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+        }
+        .warning-box {
+            background: #fefcbf;
+            border: 1px solid #ecc94b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #975a16;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ System Settings</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="warning-box">
+                ⚠️ <strong>Warning:</strong> Changing these settings will affect how attendance is calculated. Please be careful.
+            </div>
+
+            <!-- Attendance Rules -->
+            <div class="settings-section">
+                <h3>📋 Attendance Rules</h3>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Minimum Hours for Present</div>
+                        <div class="setting-desc">Laborers must work at least this many hours to be marked Present (P)</div>
+                    </div>
+                    <input type="number" class="setting-input" id="min_hours_present" min="1" max="24" step="0.5">
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Minimum Hours for Half Day</div>
+                        <div class="setting-desc">Laborers must work at least this many hours to be marked Half Day (H)</div>
+                    </div>
+                    <input type="number" class="setting-input" id="min_hours_half_day" min="1" max="24" step="0.5">
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Maximum Punches Per Day</div>
+                        <div class="setting-desc">Maximum number of punch-in/out allowed per day (set 999 for testing)</div>
+                    </div>
+                    <input type="number" class="setting-input" id="max_punches_per_day" min="2" max="999">
+                </div>
+            </div>
+
+            <!-- Face Recognition -->
+            <div class="settings-section">
+                <h3>📸 Face Recognition</h3>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Minimum Confidence Threshold (%)</div>
+                        <div class="setting-desc">Punch will be rejected if face match confidence is below this value</div>
+                    </div>
+                    <input type="number" class="setting-input" id="confidence_threshold" min="50" max="99">
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Re-enrollment Threshold (%)</div>
+                        <div class="setting-desc">Flag laborer for re-enrollment if confidence falls below this value</div>
+                    </div>
+                    <input type="number" class="setting-input" id="reenrollment_threshold" min="40" max="99">
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Low Confidence Attempts</div>
+                        <div class="setting-desc">Number of low-confidence attempts (in a week) before flagging for re-enrollment</div>
+                    </div>
+                    <input type="number" class="setting-input" id="reenrollment_attempts" min="1" max="10">
+                </div>
+            </div>
+
+            <!-- Photo Storage -->
+            <div class="settings-section">
+                <h3>📷 Photo Storage</h3>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Photo Retention Days</div>
+                        <div class="setting-desc">Punch photos will be automatically deleted after this many days</div>
+                    </div>
+                    <input type="number" class="setting-input" id="photo_retention_days" min="7" max="365">
+                </div>
+            </div>
+
+            <!-- Save Bar -->
+            <div class="save-bar">
+                <button type="button" class="btn btn-secondary" onclick="loadSettings()">🔄 Reset</button>
+                <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+
+    <script>
+        // Require Super Admin
+        if (!AUTH.requireRole(['super_admin'])) {
+            // Redirect handled by requireRole
+        }
+
+        let originalSettings = {};
+
+        // Load settings
+        async function loadSettings() {
+            try {
+                SyncIndicator.show('Loading settings...');
+
+                const { data, error } = await supabase
+                    .from('settings')
+                    .select('*');
+
+                if (error) throw error;
+
+                // Populate form
+                data.forEach(setting => {
+                    const input = document.getElementById(setting.key);
+                    if (input) {
+                        input.value = setting.value;
+                        originalSettings[setting.key] = setting.value;
+                    }
+                });
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load settings: ' + error.message);
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            const settingsToSave = [
+                'min_hours_present',
+                'min_hours_half_day',
+                'max_punches_per_day',
+                'confidence_threshold',
+                'reenrollment_threshold',
+                'reenrollment_attempts',
+                'photo_retention_days'
+            ];
+
+            // Validation
+            const minPresent = parseFloat(document.getElementById('min_hours_present').value);
+            const minHalf = parseFloat(document.getElementById('min_hours_half_day').value);
+            
+            if (minHalf >= minPresent) {
+                Toast.error('Half day hours must be less than present hours');
+                return;
+            }
+
+            const confThreshold = parseInt(document.getElementById('confidence_threshold').value);
+            const reenrollThreshold = parseInt(document.getElementById('reenrollment_threshold').value);
+            
+            if (reenrollThreshold >= confThreshold) {
+                Toast.error('Re-enrollment threshold must be less than confidence threshold');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Saving settings...');
+
+                for (const key of settingsToSave) {
+                    const input = document.getElementById(key);
+                    if (input && input.value !== originalSettings[key]) {
+                        const { error } = await supabase
+                            .from('settings')
+                            .update({ value: input.value, updated_at: new Date().toISOString() })
+                            .eq('key', key);
+
+                        if (error) throw error;
+
+                        // Log the change
+                        await AUTH.logAction('UPDATE_SETTING', 'settings', key, 
+                            { value: originalSettings[key] }, 
+                            { value: input.value }
+                        );
+
+                        originalSettings[key] = input.value;
+                    }
+                }
+
+                SyncIndicator.hide();
+                Toast.success('Settings saved successfully!');
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to save settings: ' + error.message);
+            }
+        }
+
+        // Initialize
+        loadSettings();
+    </script>
+</body>
+</html>

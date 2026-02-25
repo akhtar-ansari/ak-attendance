@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Daily Report</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .filters-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .summary-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .summary-card .label {
+            font-size: 12px;
+            color: #666;
+        }
+        .status-P { color: #22543d; background: #c6f6d5; }
+        .status-H { color: #975a16; background: #fefcbf; }
+        .status-A { color: #c53030; background: #fed7d7; }
+        .photo-btn {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .photo-btn:hover {
+            background: #3182ce;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Daily Attendance Report</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Filters -->
+            <div class="filters-card">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>From Date</label>
+                        <input type="date" id="fromDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>To Date</label>
+                        <input type="date" id="toDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select id="departmentFilter" class="form-control">
+                            <option value="">All Departments</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Labor</label>
+                        <select id="laborFilter" class="form-control">
+                            <option value="">All Laborers</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="action-buttons" style="margin-top: 15px;">
+                    <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
+                    <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="summary-grid" id="summarySection" style="display: none;">
+                <div class="summary-card">
+                    <div class="value" id="totalRecords" style="color: #667eea;">0</div>
+                    <div class="label">Total Records</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="presentCount" style="color: #48bb78;">0</div>
+                    <div class="label">Present</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="halfDayCount" style="color: #ed8936;">0</div>
+                    <div class="label">Half Day</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="absentCount" style="color: #e53e3e;">0</div>
+                    <div class="label">Absent</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="avgHours" style="color: #4299e1;">0</div>
+                    <div class="label">Avg Hours</div>
+                </div>
+            </div>
+
+            <!-- Report Table -->
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Labor ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Login</th>
+                            <th>Logout</th>
+                            <th>Hours</th>
+                            <th>Status</th>
+                            <th>Photos</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTable">
+                        <tr>
+                            <td colspan="9" class="text-center p-20 text-muted">
+                                Select date range and click "Generate Report"
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Modal -->
+    <div class="modal-overlay" id="photoModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 id="photoModalTitle">Punch Photos</h2>
+                <button type="button" class="modal-close" onclick="closePhotoModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="photoModalBody">
+                <!-- Photos will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/utils/csv-handler.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/department-api.js"></script>
+    <script src="../js/api/labor-api.js"></script>
+    <script src="../js/api/report-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        let departments = [];
+        let laborers = [];
+        let reportData = [];
+
+        // Set default dates
+        function setDefaultDates() {
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            
+            document.getElementById('fromDate').value = DateUtils.formatForInput(firstDay);
+            document.getElementById('toDate').value = DateUtils.formatForInput(today);
+        }
+
+        // Load filter options
+        async function loadFilters() {
+            try {
+                SyncIndicator.show('Loading...');
+
+                // Load departments
+                const deptResult = await DepartmentAPI.getActive();
+                if (deptResult.success) {
+                    departments = deptResult.data;
+                    const deptSelect = document.getElementById('departmentFilter');
+                    deptSelect.innerHTML = '<option value="">All Departments</option>';
+                    
+                    departments.forEach(dept => {
+                        if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                            deptSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+                        }
+                    });
+                }
+
+                // Load laborers
+                const laborResult = await LaborAPI.getAll();
+                if (laborResult.success) {
+                    laborers = laborResult.data;
+                    const laborSelect = document.getElementById('laborFilter');
+                    laborSelect.innerHTML = '<option value="">All Laborers</option>';
+                    
+                    laborers.forEach(labor => {
+                        laborSelect.innerHTML += `<option value="${labor.labor_id}">${labor.labor_id} - ${labor.name}</option>`;
+                    });
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load filters');
+            }
+        }
+
+        // Generate report
+        async function generateReport() {
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            const departmentId = document.getElementById('departmentFilter').value;
+            const laborId = document.getElementById('laborFilter').value;
+
+            if (!fromDate || !toDate) {
+                Toast.error('Please select date range');
+                return;
+            }
+
+            if (new Date(fromDate) > new Date(toDate)) {
+                Toast.error('From date cannot be after To date');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Generating report...');
+
+                const result = await ReportAPI.getDailyAttendance(fromDate, toDate, departmentId);
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                reportData = result.data;
+
+                // Filter by labor if selected
+                if (laborId) {
+                    reportData = reportData.filter(r => r.labor_id === laborId);
+                }
+
+                // Calculate summary
+                const presentCount = reportData.filter(r => r.final_status === 'P').length;
+                const halfDayCount = reportData.filter(r => r.final_status === 'H').length;
+                const absentCount = reportData.filter(r => r.final_status === 'A').length;
+                const totalHours = reportData.reduce((sum, r) => sum + (parseFloat(r.total_hours) || 0), 0);
+                const avgHours = reportData.length > 0 ? (totalHours / reportData.length).toFixed(1) : 0;
+
+                // Update summary
+                document.getElementById('totalRecords').textContent = reportData.length;
+                document.getElementById('presentCount').textContent = presentCount;
+                document.getElementById('halfDayCount').textContent = halfDayCount;
+                document.getElementById('absentCount').textContent = absentCount;
+                document.getElementById('avgHours').textContent = avgHours;
+                document.getElementById('summarySection').style.display = 'grid';
+
+                // Render table
+                renderTable();
+
+                SyncIndicator.hide();
+                Toast.success(`Found ${reportData.length} records`);
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to generate report: ' + error.message);
+            }
+        }
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('reportTable');
+
+            if (reportData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="text-center p-20 text-muted">
+                            No records found for selected criteria
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = reportData.map(record => {
+                const labor = laborers.find(l => l.labor_id === record.labor_id);
+                const laborName = labor?.name || record.laborers?.name || 'Unknown';
+                const deptName = labor?.departments?.name || '-';
+                
+                const statusClass = `status-${record.final_status}`;
+                const statusText = record.final_status === 'P' ? 'Present' : 
+                                   record.final_status === 'H' ? 'Half Day' : 'Absent';
+
+                return `
+                    <tr>
+                        <td>${DateUtils.formatDate(record.date)}</td>
+                        <td><strong>${record.labor_id}</strong></td>
+                        <td>${laborName}</td>
+                        <td>${deptName}</td>
+                        <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
+                        <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
+                        <td>${record.total_hours ? parseFloat(record.total_hours).toFixed(1) + 'h' : '-'}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">
+                                📷 View
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // View photos
+        async function viewPhotos(laborId, date) {
+            try {
+                SyncIndicator.show('Loading photos...');
+
+                const result = await ReportAPI.getPunchPhotos(laborId, date);
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                const photos = result.data;
+                const labor = laborers.find(l => l.labor_id === laborId);
+
+                document.getElementById('photoModalTitle').textContent = 
+                    `${labor?.name || laborId} - ${DateUtils.formatDate(date)}`;
+
+                if (photos.length === 0) {
+                    document.getElementById('photoModalBody').innerHTML = `
+                        <div class="text-center p-20 text-muted">
+                            <div style="font-size: 48px; margin-bottom: 15px;">📷</div>
+                            <p>No punch photos available for this date</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('photoModalBody').innerHTML = photos.map(punch => `
+                        <div style="display: flex; gap: 20px; align-items: center; padding: 15px; border-bottom: 1px solid #e0e0e0;">
+                            <div style="flex-shrink: 0;">
+                                ${punch.photo_url ? 
+                                    `<img src="${punch.photo_url}" alt="Punch photo" 
+                                         style="width: 120px; height: 90px; object-fit: cover; border-radius: 8px; cursor: pointer;"
+                                         onclick="window.open('${punch.photo_url}', '_blank')">` :
+                                    `<div style="width: 120px; height: 90px; background: #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999;">No Photo</div>`
+                                }
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">
+                                    ${punch.type === 'login' ? '🟢 Login' : '🔴 Logout'}
+                                </div>
+                                <div style="color: #666; font-size: 14px;">
+                                    Time: ${DateUtils.formatTime(punch.time)}
+                                </div>
+                                <div style="color: #666; font-size: 14px;">
+                                    Location: ${punch.location_name || '-'}
+                                </div>
+                                <div style="color: #666; font-size: 14px;">
+                                    Confidence: ${punch.confidence || '-'}%
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('photoModal').classList.add('active');
+                SyncIndicator.hide();
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load photos: ' + error.message);
+            }
+        }
+
+        // Close photo modal
+        function closePhotoModal() {
+            document.getElementById('photoModal').classList.remove('active');
+        }
+
+        // Export CSV
+        function exportCSV() {
+            if (reportData.length === 0) {
+                Toast.error('No data to export. Generate report first.');
+                return;
+            }
+
+            const data = reportData.map(record => {
+                const labor = laborers.find(l => l.labor_id === record.labor_id);
+                return {
+                    'Date': DateUtils.formatDate(record.date),
+                    'Labor ID': record.labor_id,
+                    'Name': labor?.name || 'Unknown',
+                    'Iqama': labor?.iqama_number || '-',
+                    'Department': labor?.departments?.name || '-',
+                    'Login': DateUtils.formatTimeShort(record.first_login) || '-',
+                    'Logout': DateUtils.formatTimeShort(record.last_logout) || '-',
+                    'Hours': record.total_hours ? parseFloat(record.total_hours).toFixed(1) : '0',
+                    'Status': record.final_status
+                };
+            });
+
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            
+            CSVHandler.exportToCSV(data, `attendance_report_${fromDate}_to_${toDate}`);
+            Toast.success('CSV exported!');
+        }
+
+        // Initialize
+        setDefaultDates();
+        loadFilters();
+    </script>
+</body>
+</html>

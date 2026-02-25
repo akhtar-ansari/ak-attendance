@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - User Management</title>
+    <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👤 User Management</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" onclick="showAddModal()">➕ Add User</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTable">
+                        <tr>
+                            <td colspan="7" class="text-center p-20">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="userModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add User</h2>
+                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                
+                <div class="form-group">
+                    <label>Username * (lowercase, no spaces)</label>
+                    <input type="text" id="userName" class="form-control" placeholder="e.g., john.doe" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Full Name *</label>
+                    <input type="text" id="fullName" class="form-control" placeholder="e.g., John Doe" required>
+                </div>
+                
+                <div class="form-group" id="passwordGroup">
+                    <label>Password * <span id="passwordHint" class="text-muted">(min 6 characters)</span></label>
+                    <input type="password" id="password" class="form-control" placeholder="Enter password" minlength="6">
+                </div>
+                
+                <div class="form-group">
+                    <label>Role *</label>
+                    <select id="userRole" class="form-control" onchange="toggleDepartmentField()">
+                        <option value="">-- Select Role --</option>
+                        <option value="super_admin">Super Admin (Full Access)</option>
+                        <option value="admin">Admin (Department Access)</option>
+                        <option value="supervisor">Supervisor (Warehouse Only)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="departmentGroup">
+                    <label>Department * (required for Admin & Supervisor)</label>
+                    <select id="userDepartment" class="form-control">
+                        <option value="">-- Select Department --</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="userStatus" class="form-control">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/user-api.js"></script>
+    <script src="../js/api/department-api.js"></script>
+
+    <script>
+        // Require Super Admin
+        if (!AUTH.requireRole(['super_admin'])) {
+            // Redirect handled by requireRole
+        }
+
+        let users = [];
+        let departments = [];
+
+        // Load data
+        async function loadData() {
+            try {
+                SyncIndicator.show('Loading data...');
+
+                // Load departments first
+                const deptResult = await DepartmentAPI.getAll();
+                if (deptResult.success) {
+                    departments = deptResult.data;
+                    populateDepartmentDropdown();
+                }
+
+                // Load users
+                const userResult = await UserAPI.getAll();
+                if (userResult.success) {
+                    users = userResult.data;
+                    renderTable();
+                } else {
+                    throw new Error(userResult.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load data: ' + error.message);
+                document.getElementById('userTable').innerHTML = `
+                    <tr><td colspan="7" class="text-center p-20 text-danger">
+                        ❌ Failed to load. Check internet connection.
+                    </td></tr>
+                `;
+            }
+        }
+
+        // Populate department dropdown
+        function populateDepartmentDropdown() {
+            const select = document.getElementById('userDepartment');
+            select.innerHTML = '<option value="">-- Select Department --</option>';
+            
+            departments.forEach(dept => {
+                if (dept.status === 'active') {
+                    select.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
+                }
+            });
+        }
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('userTable');
+
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="7" class="text-center p-20 text-muted">
+                        No users found. Click "Add User" to create one.
+                    </td></tr>
+                `;
+                return;
+            }
+
+            const roleLabels = {
+                'super_admin': 'Super Admin',
+                'admin': 'Admin',
+                'supervisor': 'Supervisor'
+            };
+
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td><strong>${user.username}</strong></td>
+                    <td>${user.name}</td>
+                    <td>
+                        <span class="badge badge-info">${roleLabels[user.role] || user.role}</span>
+                    </td>
+                    <td>${user.departments ? user.departments.name : '-'}</td>
+                    <td>
+                        <span class="badge badge-${user.status === 'active' ? 'active' : 'inactive'}">
+                            ${user.status}
+                        </span>
+                    </td>
+                    <td>${DateUtils.formatDate(user.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editUser('${user.id}')">✏️ Edit</button>
+                        ${user.role !== 'super_admin' || users.filter(u => u.role === 'super_admin').length > 1 ? 
+                            `<button class="btn btn-sm btn-danger" onclick="deleteUser('${user.id}')">🗑️ Delete</button>` : 
+                            ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Toggle department field based on role
+        function toggleDepartmentField() {
+            const role = document.getElementById('userRole').value;
+            const deptGroup = document.getElementById('departmentGroup');
+            const deptSelect = document.getElementById('userDepartment');
+
+            if (role === 'super_admin') {
+                deptGroup.style.display = 'none';
+                deptSelect.removeAttribute('required');
+            } else {
+                deptGroup.style.display = 'block';
+                deptSelect.setAttribute('required', 'required');
+            }
+        }
+
+        // Show add modal
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add User';
+            document.getElementById('editId').value = '';
+            document.getElementById('userName').value = '';
+            document.getElementById('userName').disabled = false;
+            document.getElementById('fullName').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('password').required = true;
+            document.getElementById('passwordHint').textContent = '(min 6 characters)';
+            document.getElementById('userRole').value = '';
+            document.getElementById('userDepartment').value = '';
+            document.getElementById('userStatus').value = 'active';
+            document.getElementById('departmentGroup').style.display = 'block';
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        // Edit user
+        function editUser(id) {
+            const user = users.find(u => u.id === id);
+            if (!user) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit User';
+            document.getElementById('editId').value = user.id;
+            document.getElementById('userName').value = user.username;
+            document.getElementById('userName').disabled = true; // Can't change username
+            document.getElementById('fullName').value = user.name;
+            document.getElementById('password').value = '';
+            document.getElementById('password').required = false;
+            document.getElementById('passwordHint').textContent = '(leave blank to keep current)';
+            document.getElementById('userRole').value = user.role;
+            document.getElementById('userDepartment').value = user.department_id || '';
+            document.getElementById('userStatus').value = user.status;
+            
+            toggleDepartmentField();
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('userModal').classList.remove('active');
+        }
+
+        // Save user
+        async function saveUser() {
+            const editId = document.getElementById('editId').value;
+            const username = document.getElementById('userName').value.trim().toLowerCase();
+            const name = document.getElementById('fullName').value.trim();
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('userRole').value;
+            const departmentId = document.getElementById('userDepartment').value;
+            const status = document.getElementById('userStatus').value;
+
+            // Validation
+            if (!username || !name || !role) {
+                Toast.error('Please fill all required fields');
+                return;
+            }
+
+            if (!editId && (!password || password.length < 6)) {
+                Toast.error('Password must be at least 6 characters');
+                return;
+            }
+
+            if (role !== 'super_admin' && !departmentId) {
+                Toast.error('Please select a department');
+                return;
+            }
+
+            // Check for spaces in username
+            if (username.includes(' ')) {
+                Toast.error('Username cannot contain spaces');
+                return;
+            }
+
+            try {
+                SyncIndicator.show(editId ? 'Updating...' : 'Creating...');
+
+                let result;
+                if (editId) {
+                    const updates = { name, role, departmentId, status };
+                    if (password) updates.password = password;
+                    result = await UserAPI.update(editId, updates);
+                } else {
+                    result = await UserAPI.create({ username, name, password, role, departmentId, status });
+                }
+
+                if (result.success) {
+                    Toast.success(editId ? 'User updated!' : 'User created!');
+                    closeModal();
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to save: ' + error.message);
+            }
+        }
+
+        // Delete user
+        async function deleteUser(id) {
+            const user = users.find(u => u.id === id);
+            
+            if (!confirm(`Delete user "${user.name}" (${user.username})?\n\nThis will deactivate the account.`)) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Deleting...');
+
+                const result = await UserAPI.delete(id);
+
+                if (result.success) {
+                    Toast.success('User deleted!');
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
+
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - 3PL Billing Report</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .filters-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .billing-table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        .billing-table {
+            border-collapse: collapse;
+            font-size: 12px;
+            min-width: 100%;
+        }
+        .billing-table th, .billing-table td {
+            border: 1px solid #d0d0d0;
+            padding: 8px 6px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .billing-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        .billing-table th.day-header {
+            min-width: 35px;
+        }
+        .billing-table td.labor-id {
+            font-weight: 600;
+            background: #f7fafc;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .billing-table td.name-cell {
+            text-align: left;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .billing-table td.status-P {
+            background: #c6f6d5;
+            color: #22543d;
+            font-weight: 600;
+        }
+        .billing-table td.status-H {
+            background: #fefcbf;
+            color: #975a16;
+            font-weight: 600;
+        }
+        .billing-table td.status-A {
+            background: #fed7d7;
+            color: #c53030;
+            font-weight: 600;
+        }
+        .billing-table td.status-F {
+            background: #e2e8f0;
+            color: #718096;
+        }
+        .billing-table td.total-cell {
+            background: #edf2f7;
+            font-weight: 600;
+        }
+        .billing-table tr:hover td:not(.labor-id) {
+            opacity: 0.9;
+        }
+        .summary-row td {
+            background: #667eea !important;
+            color: white !important;
+            font-weight: 600;
+        }
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="header">
+            <h1>📋 3PL Monthly Billing Report</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Filters -->
+            <div class="filters-card">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Year</label>
+                        <select id="yearSelect" class="form-control">
+                            <!-- Years will be populated -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Month</label>
+                        <select id="monthSelect" class="form-control">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select id="departmentFilter" class="form-control">
+                            <option value="">All Departments</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="action-buttons" style="margin-top: 15px;">
+                    <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
+                    <button type="button" class="btn btn-success" onclick="exportExcel()">📥 Export Excel</button>
+                    <button type="button" class="btn btn-secondary" onclick="printReport()">🖨️ Print</button>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #c6f6d5; color: #22543d;">P</div>
+                    <span>Present</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fefcbf; color: #975a16;">H</div>
+                    <span>Half Day</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fed7d7; color: #c53030;">A</div>
+                    <span>Absent</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e2e8f0; color: #718096;">-</div>
+                    <span>Friday (Holiday)</span>
+                </div>
+            </div>
+
+            <!-- Report Table -->
+            <div class="billing-table-container" id="reportContainer">
+                <div class="text-center p-20 text-muted">
+                    Select year, month and click "Generate Report"
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/department-api.js"></script>
+    <script src="../js/api/report-api.js"></script>
+
+    <script>
+        // Require login
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        let departments = [];
+        let reportData = [];
+        let reportMeta = {};
+
+        // Initialize year dropdown
+        function initYearDropdown() {
+            const yearSelect = document.getElementById('yearSelect');
+            const currentYear = new Date().getFullYear();
+            
+            for (let year = currentYear; year >= currentYear - 2; year--) {
+                yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+            }
+        }
+
+        // Set current month
+        function setCurrentMonth() {
+            const currentMonth = new Date().getMonth() + 1;
+            document.getElementById('monthSelect').value = currentMonth;
+        }
+
+        // Load departments
+        async function loadDepartments() {
+            try {
+                const result = await DepartmentAPI.getActive();
+                if (result.success) {
+                    departments = result.data;
+                    const select = document.getElementById('departmentFilter');
+                    select.innerHTML = '<option value="">All Departments</option>';
+                    
+                    departments.forEach(dept => {
+                        if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                            select.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+                        }
+                    });
+                }
+            } catch (error) {
+                Toast.error('Failed to load departments');
+            }
+        }
+
+        // Generate report
+        async function generateReport() {
+            const year = parseInt(document.getElementById('yearSelect').value);
+            const month = parseInt(document.getElementById('monthSelect').value);
+            const departmentId = document.getElementById('departmentFilter').value;
+
+            try {
+                SyncIndicator.show('Generating billing report...');
+
+                const result = await ReportAPI.getMonthlyBilling(year, month, departmentId);
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                reportData = result.data;
+                reportMeta = result.meta;
+
+                renderTable();
+
+                SyncIndicator.hide();
+                Toast.success(`Report generated for ${reportData.length} laborers`);
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to generate report: ' + error.message);
+            }
+        }
+
+        // Render table
+        function renderTable() {
+            const container = document.getElementById('reportContainer');
+
+            if (reportData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-20 text-muted">
+                        No data found for selected period
+                    </div>
+                `;
+                return;
+            }
+
+            const totalDays = reportMeta.totalDays;
+
+            // Build header
+            let headerHtml = `
+                <tr>
+                    <th>Sr</th>
+                    <th>Labor ID</th>
+                    <th>Iqama</th>
+                    <th>Name</th>
+                    <th>DOJ</th>
+            `;
+
+            for (let day = 1; day <= totalDays; day++) {
+                headerHtml += `<th class="day-header">${day}</th>`;
+            }
+
+            headerHtml += `
+                    <th>Work Days</th>
+                    <th>Half Days</th>
+                    <th>Absent</th>
+                    <th>Fridays</th>
+                </tr>
+            `;
+
+            // Build body
+            let bodyHtml = '';
+            let totalPresent = 0;
+            let totalHalfDay = 0;
+            let totalAbsent = 0;
+            let totalFridays = 0;
+
+            reportData.forEach((labor, index) => {
+                bodyHtml += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td class="labor-id">${labor.laborId}</td>
+                        <td>${labor.iqamaNumber}</td>
+                        <td class="name-cell" title="${labor.name}">${labor.name}</td>
+                        <td>${DateUtils.formatDate(labor.dateOfJoining)}</td>
+                `;
+
+                for (let day = 1; day <= totalDays; day++) {
+                    const status = labor.days[day] || '-';
+                    let cellClass = '';
+                    
+                    if (status === 'P') cellClass = 'status-P';
+                    else if (status === 'H') cellClass = 'status-H';
+                    else if (status === 'A') cellClass = 'status-A';
+                    else if (status === '-') cellClass = 'status-F';
+
+                    bodyHtml += `<td class="${cellClass}">${status}</td>`;
+                }
+
+                bodyHtml += `
+                        <td class="total-cell">${labor.presentCount}</td>
+                        <td class="total-cell">${labor.halfDayCount}</td>
+                        <td class="total-cell">${labor.absentCount}</td>
+                        <td class="total-cell">${labor.fridayCount}</td>
+                    </tr>
+                `;
+
+                totalPresent += labor.presentCount;
+                totalHalfDay += labor.halfDayCount;
+                totalAbsent += labor.absentCount;
+                totalFridays += labor.fridayCount;
+            });
+
+            // Summary row
+            bodyHtml += `
+                <tr class="summary-row">
+                    <td colspan="5"><strong>GRAND TOTAL</strong></td>
+            `;
+
+            for (let day = 1; day <= totalDays; day++) {
+                bodyHtml += `<td></td>`;
+            }
+
+            bodyHtml += `
+                    <td>${totalPresent}</td>
+                    <td>${totalHalfDay}</td>
+                    <td>${totalAbsent}</td>
+                    <td>${totalFridays}</td>
+                </tr>
+            `;
+
+            container.innerHTML = `
+                <table class="billing-table">
+                    <thead>${headerHtml}</thead>
+                    <tbody>${bodyHtml}</tbody>
+                </table>
+            `;
+        }
+
+        // Export Excel (CSV format)
+        function exportExcel() {
+            if (reportData.length === 0) {
+                Toast.error('No data to export. Generate report first.');
+                return;
+            }
+
+            const totalDays = reportMeta.totalDays;
+            
+            // Build header
+            let headers = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
+            for (let day = 1; day <= totalDays; day++) {
+                headers.push(day.toString());
+            }
+            headers.push('Work Days', 'Half Days', 'Absent', 'Fridays');
+
+            // Build rows
+            const rows = reportData.map((labor, index) => {
+                let row = [
+                    index + 1,
+                    labor.laborId,
+                    labor.iqamaNumber,
+                    labor.name,
+                    DateUtils.formatDate(labor.dateOfJoining)
+                ];
+
+                for (let day = 1; day <= totalDays; day++) {
+                    row.push(labor.days[day] || '-');
+                }
+
+                row.push(labor.presentCount, labor.halfDayCount, labor.absentCount, labor.fridayCount);
+                return row;
+            });
+
+            // Create CSV
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.map(cell => {
+                    const str = cell.toString();
+                    if (str.includes(',') || str.includes('"')) {
+                        return `"${str.replace(/"/g, '""')}"`;
+                    }
+                    return str;
+                }).join(',') + '\n';
+            });
+
+            // Download
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `3PL_Billing_${reportMeta.year}_${String(reportMeta.month).padStart(2, '0')}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            Toast.success('Excel exported!');
+        }
+
+        // Print report
+        function printReport() {
+            if (reportData.length === 0) {
+                Toast.error('No data to print. Generate report first.');
+                return;
+            }
+
+            const printContent = document.getElementById('reportContainer').innerHTML;
+            const printWindow = window.open('', '_blank');
+            
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>3PL Billing Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; font-size: 10px; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #333; padding: 4px; text-align: center; }
+                        th { background: #667eea; color: white; }
+                        .status-P { background: #c6f6d5; }
+                        .status-H { background: #fefcbf; }
+                        .status-A { background: #fed7d7; }
+                        .status-F { background: #e2e8f0; }
+                        .total-cell { background: #edf2f7; font-weight: bold; }
+                        .summary-row td { background: #667eea !important; color: white !important; }
+                        .labor-id, .name-cell { text-align: left; }
+                        @media print {
+                            @page { size: landscape; margin: 0.5cm; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h2 style="text-align: center;">3PL Monthly Billing Report - ${reportMeta.month}/${reportMeta.year}</h2>
+                    ${printContent}
+                </body>
+                </html>
+            `);
+            
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Initialize
+        initYearDropdown();
+        setCurrentMonth();
+        loadDepartments();
+    </script>
+</body>
+</html>

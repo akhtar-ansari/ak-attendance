@@ -1,0 +1,205 @@
+/* AK Attendance - Punch Terminal Styles */
+/* Additional styles for punch terminal customization */
+
+/* Fullscreen mode */
+.punch-container.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+}
+
+/* Different themes */
+.punch-container.theme-dark {
+    --bg-color: #000;
+    --text-color: #fff;
+    --accent-color: #667eea;
+}
+
+.punch-container.theme-light {
+    --bg-color: #f7fafc;
+    --text-color: #333;
+    --accent-color: #667eea;
+}
+
+/* Larger screens */
+@media (min-width: 1024px) {
+    .face-guide {
+        width: 320px;
+        height: 420px;
+    }
+    
+    .punch-btn {
+        width: 150px;
+        height: 150px;
+        font-size: 20px;
+    }
+    
+    .id-input-panel {
+        max-width: 450px;
+        padding: 40px;
+    }
+    
+    .id-input-panel input {
+        font-size: 24px;
+        padding: 18px;
+    }
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+    .face-guide {
+        width: 240px;
+        height: 320px;
+    }
+    
+    .punch-btn {
+        width: 110px;
+        height: 110px;
+        font-size: 16px;
+        bottom: 40px;
+    }
+    
+    .location-bar {
+        bottom: 160px;
+        font-size: 13px;
+    }
+    
+    .top-bar {
+        padding: 12px 15px;
+    }
+    
+    .time {
+        font-size: 24px;
+    }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+    .face-guide {
+        width: 200px;
+        height: 270px;
+    }
+    
+    .punch-btn {
+        width: 100px;
+        height: 100px;
+        font-size: 14px;
+        bottom: 30px;
+    }
+    
+    .location-bar {
+        bottom: 140px;
+        font-size: 12px;
+        padding: 10px 20px;
+    }
+    
+    .id-input-panel {
+        padding: 20px;
+        width: 95%;
+    }
+    
+    .id-input-panel h2 {
+        font-size: 18px;
+    }
+    
+    .id-input-panel input {
+        font-size: 18px;
+        padding: 12px;
+    }
+    
+    .status-title {
+        font-size: 26px;
+    }
+    
+    .status-time {
+        font-size: 44px;
+    }
+    
+    .status-details {
+        font-size: 15px;
+    }
+}
+
+/* Animation for successful punch */
+@keyframes successPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.status-overlay.success .status-icon {
+    animation: successPulse 0.5s ease;
+}
+
+/* Loading spinner for punch button */
+.punch-btn.loading {
+    pointer-events: none;
+}
+
+.punch-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Night mode (auto after 6 PM) */
+.punch-container.night-mode .top-bar {
+    background: rgba(0,0,0,0.95);
+}
+
+.punch-container.night-mode .face-guide {
+    border-color: #9f7aea;
+    box-shadow: 0 0 40px rgba(159, 122, 234, 0.4);
+}
+
+/* Accessibility improvements */
+.punch-btn:focus {
+    outline: 4px solid #48bb78;
+    outline-offset: 4px;
+}
+
+#laborIdInput:focus {
+    border-color: #48bb78;
+    box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.3);
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .face-guide {
+        border-width: 6px;
+    }
+    
+    .punch-btn {
+        border-width: 8px;
+    }
+    
+    .location-bar {
+        font-weight: bold;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .face-guide {
+        animation: none;
+    }
+    
+    .punch-btn.loading::after {
+        animation: none;
+    }
+}

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Login</title>
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: white;
+            padding: 50px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 400px;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo-icon {
+            font-size: 60px;
+            margin-bottom: 10px;
+        }
+        .logo h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .logo p {
+            color: #999;
+            font-size: 14px;
+        }
+        .login-form .form-group {
+            margin-bottom: 20px;
+        }
+        .login-form .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+        }
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        .error-message.active {
+            display: block;
+        }
+        .version {
+            text-align: center;
+            margin-top: 20px;
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <div class="logo-icon">🏢</div>
+            <h1>AK ATTENDANCE</h1>
+            <p>Warehouse Management System</p>
+        </div>
+
+        <div id="errorMsg" class="error-message"></div>
+
+        <form class="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" class="form-control" required autofocus placeholder="Enter username">
+            </div>
+
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="password" class="form-control" required placeholder="Enter password">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="loginBtn">
+                Login
+            </button>
+        </form>
+
+        <div class="version">Version 2.0</div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- App Scripts -->
+    <script src="js/config/supabase.js"></script>
+    <script src="js/auth/auth.js"></script>
+    <script src="js/ui/toast.js"></script>
+
+    <script>
+        // Check if already logged in
+        if (AUTH.isLoggedIn()) {
+            window.location.href = 'dashboard.html';
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+
+            // Clear previous error
+            errorMsg.classList.remove('active');
+
+            // Disable button
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+
+            try {
+                // Test connection first
+                const connected = await testConnection();
+                if (!connected) {
+                    throw new Error('Cannot connect to server. Check internet connection.');
+                }
+
+                // Attempt login
+                const result = await AUTH.login(username, password);
+
+                if (result.success) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    errorMsg.textContent = '❌ ' + result.error;
+                    errorMsg.classList.add('active');
+                }
+            } catch (error) {
+                errorMsg.textContent = '❌ ' + error.message;
+                errorMsg.classList.add('active');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        }
+
+        // Enter key submits form
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                handleLogin(e);
+            }
+        });
+    </script>
+</body>
+</html>

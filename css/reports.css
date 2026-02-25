@@ -1,0 +1,266 @@
+/* AK Attendance - Reports Styles */
+
+/* Report filters section */
+.report-filters {
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    padding: 25px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    border: 1px solid #e2e8f0;
+}
+
+/* Summary cards */
+.report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.report-summary-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.2s ease;
+}
+
+.report-summary-card:hover {
+    transform: translateY(-3px);
+}
+
+.report-summary-card .value {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.report-summary-card .label {
+    font-size: 12px;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Status colors */
+.report-summary-card.present .value { color: #48bb78; }
+.report-summary-card.half-day .value { color: #ed8936; }
+.report-summary-card.absent .value { color: #f56565; }
+.report-summary-card.total .value { color: #667eea; }
+
+/* Photo gallery in modal */
+.photo-gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.photo-item {
+    display: flex;
+    gap: 20px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 10px;
+    align-items: center;
+}
+
+.photo-item img {
+    width: 120px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.photo-item img:hover {
+    transform: scale(1.05);
+}
+
+.photo-item .details {
+    flex: 1;
+}
+
+.photo-item .punch-type {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.photo-item .punch-type.login { color: #48bb78; }
+.photo-item .punch-type.logout { color: #f56565; }
+
+.photo-item .punch-info {
+    font-size: 13px;
+    color: #666;
+    line-height: 1.6;
+}
+
+/* 3PL Billing table */
+.billing-report {
+    overflow-x: auto;
+    margin-top: 20px;
+}
+
+.billing-report table {
+    min-width: 100%;
+    font-size: 11px;
+}
+
+.billing-report th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+.billing-report th.day-col {
+    min-width: 32px;
+    padding: 8px 4px;
+}
+
+.billing-report td.day-cell {
+    font-weight: 600;
+    min-width: 32px;
+}
+
+.billing-report td.day-cell.P {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.billing-report td.day-cell.H {
+    background: #fefcbf;
+    color: #975a16;
+}
+
+.billing-report td.day-cell.A {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.billing-report td.day-cell.F {
+    background: #e2e8f0;
+    color: #718096;
+}
+
+.billing-report .totals-row {
+    background: #667eea;
+    color: white;
+    font-weight: 600;
+}
+
+.billing-report .totals-row td {
+    border-color: #5a67d8;
+}
+
+/* Fixed columns */
+.billing-report td.fixed-col {
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 5;
+}
+
+.billing-report th.fixed-col {
+    position: sticky;
+    left: 0;
+    z-index: 15;
+}
+
+/* Print styles */
+@media print {
+    .report-filters,
+    .action-buttons,
+    .header-actions {
+        display: none !important;
+    }
+    
+    .container, .container-fluid {
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+    
+    .billing-report table {
+        font-size: 9px;
+    }
+    
+    .billing-report th,
+    .billing-report td {
+        padding: 4px 2px;
+    }
+    
+    @page {
+        size: landscape;
+        margin: 1cm;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .report-filters {
+        padding: 15px;
+    }
+    
+    .report-summary-card {
+        padding: 15px;
+    }
+    
+    .report-summary-card .value {
+        font-size: 24px;
+    }
+    
+    .photo-item {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .photo-item img {
+        width: 100%;
+        max-width: 200px;
+        height: auto;
+    }
+}
+
+/* Export buttons */
+.export-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.export-buttons .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Date range quick select */
+.date-range-presets {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.date-range-presets button {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #e2e8f0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.date-range-presets button:hover {
+    background: #667eea;
+    color: white;
+}
+
+.date-range-presets button.active {
+    background: #667eea;
+    color: white;
+}
