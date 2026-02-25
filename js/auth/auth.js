@@ -5,7 +5,7 @@ const AUTH = {
     // Login user
     async login(username, password) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClientClient
                 .from('users')
                 .select('id, username, password_hash, name, role, department_id, status')
                 .eq('username', username.toLowerCase().trim())
@@ -135,7 +135,7 @@ const AUTH = {
     async logAction(action, tableName, recordId, oldValue, newValue) {
         try {
             const session = this.getSession();
-            await supabaseClient.from('audit_log').insert({
+            await supabaseClientClientClient.from('audit_log').insert({
                 user_id: session?.userId || null,
                 user_name: session?.name || 'System',
                 action: action,
