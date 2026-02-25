@@ -176,7 +176,7 @@ const PunchAPI = {
             const fileName = `${laborId}_${timestamp}.jpg`;
             const filePath = `punches/${fileName}`;
 
-            const { data, error } = await supabase.storage
+            const { data, error } = await supabaseClient.storage
                 .from('punch-photos')
                 .upload(filePath, photoBlob, {
                     contentType: 'image/jpeg',
@@ -186,7 +186,7 @@ const PunchAPI = {
             if (error) throw error;
 
             // Get public URL
-            const { data: urlData } = supabase.storage
+            const { data: urlData } = supabaseClient.storage
                 .from('punch-photos')
                 .getPublicUrl(filePath);
 
@@ -219,7 +219,7 @@ const PunchAPI = {
             if (error) throw error;
 
             // Update daily attendance
-            await supabase.rpc('update_daily_attendance', {
+            await supabaseClient.rpc('update_daily_attendance', {
                 p_labor_id: punch.laborId,
                 p_date: punch.date
             });
@@ -424,7 +424,7 @@ const PunchAPI = {
                     const url = punch.photo_url;
                     const pathMatch = url.match(/punch-photos\/(.+)$/);
                     if (pathMatch) {
-                        await supabase.storage
+                        await supabaseClient.storage
                             .from('punch-photos')
                             .remove([pathMatch[1]]);
                     }

@@ -215,7 +215,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- App Scripts -->
-    <script src="../js/config/supabase.js"></script>
+    <script src="../js/config/supabaseClient.js"></script>
     <script src="../js/utils/date-utils.js"></script>
     <script src="../js/utils/photo-utils.js"></script>
     <script src="../js/api/labor-api.js"></script>
@@ -283,7 +283,7 @@
                 }
 
                 // Load settings
-                const { data: settingsData } = await supabase.from('settings').select('*');
+                const { data: settingsData } = await supabaseClient.from('settings').select('*');
                 if (settingsData) {
                     settingsData.forEach(s => settings[s.key] = s.value);
                 }

@@ -135,7 +135,7 @@ const AUTH = {
     async logAction(action, tableName, recordId, oldValue, newValue) {
         try {
             const session = this.getSession();
-            await supabase.from('audit_log').insert({
+            await supabaseClient.from('audit_log').insert({
                 user_id: session?.userId || null,
                 user_name: session?.name || 'System',
                 action: action,
