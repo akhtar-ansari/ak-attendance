@@ -5,7 +5,7 @@ const LaborAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('laborers')
                 .select(`
                     *,
@@ -32,7 +32,7 @@ const LaborAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('laborers')
                 .select(`
                     *,
@@ -58,7 +58,7 @@ const LaborAPI = {
     // Get single laborer by Labor ID (e.g., L1, L25)
     async getByLaborId(laborId) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('laborers')
                 .select(`
                     *,
@@ -78,7 +78,7 @@ const LaborAPI = {
     // Get laborer by Iqama number
     async getByIqama(iqamaNumber) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('laborers')
                 .select(`
                     *,
@@ -98,7 +98,7 @@ const LaborAPI = {
     // Check if Iqama exists (for duplicate prevention)
     async iqamaExists(iqamaNumber) {
         try {
-            const { count, error } = await supabase
+            const { count, error } = await supabaseClient
                 .from('laborers')
                 .select('*', { count: 'exact', head: true })
                 .eq('iqama_number', iqamaNumber);
@@ -114,7 +114,7 @@ const LaborAPI = {
     // Register Iqama and get Labor ID (from iqama_registry)
     async registerIqama(iqamaNumber) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .rpc('register_iqama', { p_iqama: iqamaNumber });
 
             if (error) throw error;
@@ -143,7 +143,7 @@ const LaborAPI = {
             const laborId = iqamaResult.laborId;
 
             // Insert laborer
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('laborers')
                 .insert({
                     labor_id: laborId,
@@ -179,7 +179,7 @@ const LaborAPI = {
     async update(laborId, updates) {
         try {
             // Get old value for audit
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('laborers')
                 .select('*')
                 .eq('labor_id', laborId)
@@ -198,7 +198,7 @@ const LaborAPI = {
             if (updates.lowConfidenceCount !== undefined) updateObj.low_confidence_count = updates.lowConfidenceCount;
             if (updates.lastLowConfidenceDate) updateObj.last_low_confidence_date = updates.lastLowConfidenceDate;
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('laborers')
                 .update(updateObj)
                 .eq('labor_id', laborId)
@@ -224,21 +224,21 @@ const LaborAPI = {
     async delete(laborId, hardDelete = false) {
         try {
             // Get old value for audit
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('laborers')
                 .select('*')
                 .eq('labor_id', laborId)
                 .single();
 
             if (hardDelete) {
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('laborers')
                     .delete()
                     .eq('labor_id', laborId);
 
                 if (error) throw error;
             } else {
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('laborers')
                     .update({ status: 'inactive' })
                     .eq('labor_id', laborId);
@@ -281,7 +281,7 @@ const LaborAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('laborers')
                 .select(`
                     *,
@@ -307,7 +307,7 @@ const LaborAPI = {
     // Update face enrollment
     async updateFaceEnrollment(laborId, faceDescriptor) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('laborers')
                 .update({
                     face_enrolled: true,
@@ -335,7 +335,7 @@ const LaborAPI = {
     // Increment low confidence count (for re-enrollment flagging)
     async incrementLowConfidence(laborId) {
         try {
-            const { data: laborer } = await supabase
+            const { data: laborer } = await supabaseClient
                 .from('laborers')
                 .select('low_confidence_count, last_low_confidence_date')
                 .eq('labor_id', laborId)
@@ -356,7 +356,7 @@ const LaborAPI = {
             // Flag for re-enrollment if count >= 3
             const needsReenrollment = newCount >= 3;
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('laborers')
                 .update({
                     low_confidence_count: newCount,
