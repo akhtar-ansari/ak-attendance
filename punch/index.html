@@ -579,10 +579,12 @@
                     throw new Error(`Face not matched (${confidence}% confidence). Please try again or contact supervisor.`);
                 }
 
-                // Check punch limit
-                const limitCheck = await PunchAPI.checkPunchLimit(currentLabor.labor_id);
-                if (!limitCheck.allowed) {
-                    throw new Error(`Punch limit reached (${limitCheck.max} per day)`);
+                // Check punch limit (skip if offline)
+                if (!isOfflineMode && navigator.onLine) {
+                    const limitCheck = await PunchAPI.checkPunchLimit(currentLabor.labor_id);
+                    if (!limitCheck.allowed) {
+                        throw new Error(`Punch limit reached (${limitCheck.max} per day)`);
+                    }
                 }
 
                 // Determine punch type
@@ -722,5 +724,6 @@
     </script>
 </body>
 </html>
+
 
 
