@@ -189,7 +189,7 @@
             try {
                 SyncIndicator.show('Loading settings...');
 
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('settings')
                     .select('*');
 
@@ -246,7 +246,7 @@
                 for (const key of settingsToSave) {
                     const input = document.getElementById(key);
                     if (input && input.value !== originalSettings[key]) {
-                        const { error } = await supabase
+                        const { error } = await supabaseClient
                             .from('settings')
                             .update({ value: input.value, updated_at: new Date().toISOString() })
                             .eq('key', key);
@@ -276,4 +276,5 @@
         loadSettings();
     </script>
 </body>
+
 </html>
