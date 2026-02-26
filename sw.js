@@ -1,5 +1,5 @@
 // AK Attendance - Service Worker
-const CACHE_NAME = 'ak-attendance-v3';
+const CACHE_NAME = 'ak-attendance-v4';
 const OFFLINE_PUNCHES_KEY = 'ak_offline_punches';
 const FACE_DESCRIPTORS_KEY = 'ak_face_descriptors';
 const PUNCH_LOCATIONS_KEY = 'ak_punch_locations';
@@ -17,7 +17,14 @@ const CACHE_FILES = [
   '/ak-attendance/js/api/labor-api.js',
   '/ak-attendance/manifest.json',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
+  'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+  'https://justadudewhohacks.github.io/face-api.js/models/tiny_face_detector_model-weights_manifest.json',
+  'https://justadudewhohacks.github.io/face-api.js/models/tiny_face_detector_model-shard1',
+  'https://justadudewhohacks.github.io/face-api.js/models/face_landmark_68_model-weights_manifest.json',
+  'https://justadudewhohacks.github.io/face-api.js/models/face_landmark_68_model-shard1',
+  'https://justadudewhohacks.github.io/face-api.js/models/face_recognition_model-weights_manifest.json',
+  'https://justadudewhohacks.github.io/face-api.js/models/face_recognition_model-shard1',
+  'https://justadudewhohacks.github.io/face-api.js/models/face_recognition_model-shard2'
 ];
 
 // Install event - cache files
@@ -115,4 +122,5 @@ self.addEventListener('online', () => {
   self.registration.sync.register('sync-punches');
 
 });
+
 
