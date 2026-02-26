@@ -7,7 +7,7 @@ const PunchAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('punch_locations')
                 .select(`
                     *,
@@ -34,7 +34,7 @@ const PunchAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('punch_locations')
                 .select(`
                     *,
@@ -60,7 +60,7 @@ const PunchAPI = {
     // Get locations by department
     async getLocationsByDepartment(departmentId) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
                 .eq('department_id', departmentId)
@@ -78,7 +78,7 @@ const PunchAPI = {
     // Create punch location
     async createLocation(location) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_locations')
                 .insert({
                     name: location.name.trim(),
@@ -108,13 +108,13 @@ const PunchAPI = {
     // Update punch location
     async updateLocation(id, updates) {
         try {
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_locations')
                 .update({
                     name: updates.name?.trim(),
@@ -145,13 +145,13 @@ const PunchAPI = {
     // Delete punch location
     async deleteLocation(id) {
         try {
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('punch_locations')
                 .delete()
                 .eq('id', id);
@@ -169,7 +169,7 @@ const PunchAPI = {
 
     // ========== PUNCH RECORDS ==========
 
-    // Upload punch photo to Supabase Storage
+    // Upload punch photo to supabaseClient Storage
     async uploadPhoto(laborId, photoBlob) {
         try {
             const timestamp = Date.now();
@@ -200,7 +200,7 @@ const PunchAPI = {
     // Save punch record
     async savePunch(punch) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_records')
                 .insert({
                     labor_id: punch.laborId,
@@ -236,7 +236,7 @@ const PunchAPI = {
         try {
             const today = DateUtils.today();
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('*')
                 .eq('labor_id', laborId)
@@ -256,7 +256,7 @@ const PunchAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('punch_records')
                 .select('*')
                 .gte('date', fromDate)
@@ -287,7 +287,7 @@ const PunchAPI = {
         try {
             const today = DateUtils.today();
             
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('type')
                 .eq('labor_id', laborId)
@@ -314,7 +314,7 @@ const PunchAPI = {
             const today = DateUtils.today();
 
             // Get max punches setting
-            const { data: settings } = await supabase
+            const { data: settings } = await supabaseClient
                 .from('settings')
                 .select('value')
                 .eq('key', 'max_punches_per_day')
@@ -323,7 +323,7 @@ const PunchAPI = {
             const maxPunches = parseInt(settings?.value || '999');
 
             // Count today's punches
-            const { count, error } = await supabase
+            const { count, error } = await supabaseClient
                 .from('punch_records')
                 .select('*', { count: 'exact', head: true })
                 .eq('labor_id', laborId)
@@ -358,7 +358,7 @@ const PunchAPI = {
     // Find nearest location within range for a department
     async findNearestLocation(userLat, userLng, departmentId) {
         try {
-            const { data: locations, error } = await supabase
+            const { data: locations, error } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
                 .eq('department_id', departmentId)
@@ -400,7 +400,7 @@ const PunchAPI = {
     async cleanupOldPhotos() {
         try {
             // Get retention days setting
-            const { data: settings } = await supabase
+            const { data: settings } = await supabaseClient
                 .from('settings')
                 .select('value')
                 .eq('key', 'photo_retention_days')
@@ -412,7 +412,7 @@ const PunchAPI = {
             const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
             // Get old punch records with photos
-            const { data: oldPunches } = await supabase
+            const { data: oldPunches } = await supabaseClient
                 .from('punch_records')
                 .select('id, photo_url')
                 .lt('date', cutoffStr)
@@ -430,7 +430,7 @@ const PunchAPI = {
                     }
 
                     // Clear photo_url in record
-                    await supabase
+                    await supabaseClient
                         .from('punch_records')
                         .update({ photo_url: null })
                         .eq('id', punch.id);
@@ -443,4 +443,5 @@ const PunchAPI = {
             return { success: false, error: error.message };
         }
     }
+
 };
