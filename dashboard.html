@@ -152,9 +152,9 @@
                 { title: 'Reports', desc: 'View attendance', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
                 { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
                 { title: 'Punch Locations', desc: 'Manage locations', icon: '📍', link: 'attendance/punch-locations.html', class: 'tile-red' },
-                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: 'punch/index.html', class: 'tile-orange', target: '_blank' }
+                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: 'punch/index.html', class: 'tile-orange', target: '_blank' },
+                { title: 'Settings', desc: 'System settings', icon: '⚙️', link: 'admin/settings.html', class: 'tile-gray' }
             );
-
             const container = document.getElementById('navigationTiles');
             container.innerHTML = tiles.map(tile => `
                 <div class="dashboard-tile ${tile.class}" onclick="${tile.target ? `window.open('${tile.link}', '_blank')` : `location.href='${tile.link}'`}">
@@ -301,3 +301,4 @@ async function checkPhotoCleanup() {
 </body>
 
 </html>
+
