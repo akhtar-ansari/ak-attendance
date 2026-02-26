@@ -261,9 +261,43 @@
         }
 
         // Initialize
-        renderNavigationTiles();
-        renderQuickActions();
-        loadStats();
+renderNavigationTiles();
+renderQuickActions();
+loadStats();
+checkPhotoCleanup();
+
+// Check and run photo cleanup if 15 days passed
+async function checkPhotoCleanup() {
+    try {
+        const { data } = await supabaseClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'last_photo_cleanup')
+            .single();
+
+        const lastCleanup = new Date(data?.value || '2025-01-01');
+        const today = new Date();
+        const daysDiff = Math.floor((today - lastCleanup) / (1000 * 60 * 60 * 24));
+
+        if (daysDiff >= 15) {
+            console.log('Running photo cleanup...');
+            const result = await PunchAPI.cleanupOldPhotos();
+            
+            if (result.success) {
+                console.log(`Photo cleanup done. Cleaned: ${result.cleaned}`);
+                
+                // Update last cleanup date
+                await supabaseClient
+                    .from('settings')
+                    .update({ value: today.toISOString().split('T')[0] })
+                    .eq('key', 'last_photo_cleanup');
+            }
+        }
+    } catch (error) {
+        console.error('Photo cleanup check error:', error);
+    }
+}
     </script>
 </body>
+
 </html>
