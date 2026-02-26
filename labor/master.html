@@ -192,13 +192,16 @@ function checkPermissions() {
                 // Load laborers
                 const laborResult = await LaborAPI.getAll();
                 if (laborResult.success) {
-                    laborers = laborResult.data;
+                    laborers = laborResult.data.sort((a, b) => {
+                        const numA = parseInt(a.labor_id.replace('L', '')) || 0;
+                        const numB = parseInt(b.labor_id.replace('L', '')) || 0;
+                        return numA - numB;
+                    });
                     filteredLaborers = [...laborers];
                     renderTable();
                 } else {
                     throw new Error(laborResult.error);
                 }
-
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -490,3 +493,4 @@ function checkPermissions() {
 </body>
 
 </html>
+
