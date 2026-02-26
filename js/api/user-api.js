@@ -7,7 +7,7 @@ const UserAPI = {
                 return { success: false, error: 'Access denied' };
             }
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('users')
                 .select(`
                     id,
@@ -32,7 +32,7 @@ const UserAPI = {
     // Get user by ID
     async getById(id) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('users')
                 .select(`
                     id,
@@ -62,7 +62,7 @@ const UserAPI = {
             }
 
             // Check if username exists
-            const { data: existing } = await supabase
+            const { data: existing } = await supabaseClient
                 .from('users')
                 .select('id')
                 .eq('username', user.username.toLowerCase().trim())
@@ -77,7 +77,7 @@ const UserAPI = {
                 return { success: false, error: 'Department is required for Admin and Supervisor' };
             }
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('users')
                 .insert({
                     username: user.username.toLowerCase().trim(),
@@ -116,7 +116,7 @@ const UserAPI = {
                 return { success: false, error: 'Access denied' };
             }
 
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('users')
                 .select('*')
                 .eq('id', id)
@@ -131,7 +131,7 @@ const UserAPI = {
             if (updates.status) updateObj.status = updates.status;
             if (updates.password) updateObj.password_hash = updates.password;
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('users')
                 .update(updateObj)
                 .eq('id', id)
@@ -173,13 +173,13 @@ const UserAPI = {
                 return { success: false, error: 'Cannot delete your own account' };
             }
 
-            const { data: oldData } = await supabase
+            const { data: oldData } = await supabaseClient
                 .from('users')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('users')
                 .update({ status: 'inactive' })
                 .eq('id', id);
@@ -201,7 +201,7 @@ const UserAPI = {
             const session = AUTH.getSession();
 
             // Verify current password
-            const { data: user } = await supabase
+            const { data: user } = await supabaseClient
                 .from('users')
                 .select('password_hash')
                 .eq('id', session.userId)
@@ -211,7 +211,7 @@ const UserAPI = {
                 return { success: false, error: 'Current password is incorrect' };
             }
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('users')
                 .update({ password_hash: newPassword })
                 .eq('id', session.userId);
@@ -226,4 +226,5 @@ const UserAPI = {
             return { success: false, error: error.message };
         }
     }
+
 };
