@@ -254,10 +254,16 @@
 
                 reportData = result.data;
 
-                // Filter by labor if selected
-                if (laborId) {
-                    reportData = reportData.filter(r => r.labor_id === laborId);
-                }
+                // Filter by labor ID or Iqama search
+if (laborSearch) {
+    const search = laborSearch.toLowerCase();
+    reportData = reportData.filter(r => {
+        const labor = laborers.find(l => l.labor_id === r.labor_id);
+        const iqama = labor?.iqama_number || '';
+        return r.labor_id.toLowerCase().includes(search) || 
+               iqama.toLowerCase().includes(search);
+    });
+}
 
                 // Calculate summary
                 const presentCount = reportData.filter(r => r.final_status === 'P').length;
@@ -433,3 +439,4 @@
 </body>
 
 </html>
+
