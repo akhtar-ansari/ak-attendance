@@ -170,13 +170,12 @@
         let filteredLaborers = [];
 
         // Check permissions for add/import
-        function checkPermissions() {
-            if (session.role === 'supervisor') {
-                // Supervisors can view but not add/import
-                document.getElementById('addBtn').style.display = 'none';
-                document.getElementById('importBtn').style.display = 'none';
-            }
-        }
+function checkPermissions() {
+    // Supervisors can add but not import
+    if (session.role === 'supervisor') {
+        document.getElementById('importBtn').style.display = 'none';
+    }
+}
 
         // Load data
         async function loadData() {
@@ -489,4 +488,5 @@
         loadData();
     </script>
 </body>
+
 </html>
