@@ -101,14 +101,17 @@
 
         <div class="content">
             <!-- Tabs -->
-            <div class="tabs">
-                <div class="tab active" onclick="switchTab('pending')">
-                    Pending <span id="pendingCount" class="badge badge-info" style="margin-left: 5px;">0</span>
-                </div>
-                <div class="tab" onclick="switchTab('approved')">Approved</div>
-                <div class="tab" onclick="switchTab('rejected')">Rejected</div>
-                <div class="tab" onclick="switchTab('create')" id="createTab">+ Create Request</div>
-            </div>
+<div class="tabs">
+    <div class="tab" onclick="switchTab('drafts')" id="draftsTab">
+        Drafts <span id="draftsCount" class="badge badge-warning" style="margin-left: 5px;">0</span>
+    </div>
+    <div class="tab active" onclick="switchTab('pending')">
+        Pending <span id="pendingCount" class="badge badge-info" style="margin-left: 5px;">0</span>
+    </div>
+    <div class="tab" onclick="switchTab('approved')">Approved</div>
+    <div class="tab" onclick="switchTab('rejected')">Rejected</div>
+    <div class="tab" onclick="switchTab('create')" id="createTab">+ Create Request</div>
+</div>
 
             <!-- Bulk Actions -->
             <div class="bulk-actions" id="bulkActions">
@@ -585,4 +588,5 @@
         loadData();
     </script>
 </body>
+
 </html>
