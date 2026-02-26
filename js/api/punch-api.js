@@ -224,6 +224,15 @@ const PunchAPI = {
                 p_date: punch.date
             });
 
+            // Auto-create draft LOP if hours < 10 (after a short delay to let attendance update)
+            setTimeout(async () => {
+                try {
+                    await LOPAPI.autoCreateDraft(punch.laborId, punch.date, punch.departmentId);
+                } catch (e) {
+                    console.log('Auto draft check:', e.message);
+                }
+            }, 2000);
+
             return { success: true, data };
         } catch (error) {
             console.error('Save punch error:', error);
@@ -445,3 +454,4 @@ const PunchAPI = {
     }
 
 };
+
