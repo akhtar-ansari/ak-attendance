@@ -5,7 +5,7 @@ const ReportAPI = {
         try {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('daily_attendance')
                 .select(`
                     *,
@@ -39,7 +39,7 @@ const ReportAPI = {
     // Get attendance for a specific laborer
     async getLaborerAttendance(laborId, fromDate, toDate) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('daily_attendance')
                 .select('*')
                 .eq('labor_id', laborId)
@@ -58,7 +58,7 @@ const ReportAPI = {
     // Get punch photos for a specific date and laborer
     async getPunchPhotos(laborId, date) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('id, time, type, photo_url, confidence, location_name')
                 .eq('labor_id', laborId)
@@ -84,7 +84,7 @@ const ReportAPI = {
             const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
             // Get all laborers for the department
-            let laborQuery = supabase
+            let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, iqama_number, name, date_of_joining, department_id')
                 .order('labor_id');
@@ -97,7 +97,7 @@ const ReportAPI = {
             if (laborError) throw laborError;
 
             // Get all attendance records for the month
-            let attendanceQuery = supabase
+            let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status')
                 .gte('date', startDate)
@@ -200,7 +200,7 @@ const ReportAPI = {
             const today = DateUtils.today();
 
             // Get laborer counts
-            let laborQuery = supabase
+            let laborQuery = supabaseClient
                 .from('laborers')
                 .select('status, face_enrolled', { count: 'exact' });
 
@@ -215,7 +215,7 @@ const ReportAPI = {
             const faceEnrolled = laborers?.filter(l => l.face_enrolled).length || 0;
 
             // Get today's attendance
-            let attendanceQuery = supabase
+            let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('final_status')
                 .eq('date', today);
@@ -231,7 +231,7 @@ const ReportAPI = {
             const todayAbsent = todayAttendance?.filter(a => a.final_status === 'A').length || 0;
 
             // Get today's punches
-            let punchQuery = supabase
+            let punchQuery = supabaseClient
                 .from('punch_records')
                 .select('type')
                 .eq('date', today);
@@ -246,7 +246,7 @@ const ReportAPI = {
             const todayLogouts = todayPunches?.filter(p => p.type === 'logout').length || 0;
 
             // Get pending LOP requests
-            let lopQuery = supabase
+            let lopQuery = supabaseClient
                 .from('lop_requests')
                 .select('id', { count: 'exact', head: true })
                 .eq('approval_status', 'pending');
@@ -277,4 +277,5 @@ const ReportAPI = {
             return { success: false, error: error.message };
         }
     }
+
 };
