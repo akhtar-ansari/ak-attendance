@@ -273,5 +273,131 @@ const LOPAPI = {
             return { success: false, error: error.message };
         }
     }
+,
 
+    // Auto-create draft LOP for hours < 10 (but has punch)
+    async autoCreateDraft(laborId, date, departmentId) {
+        try {
+            // Get daily attendance for this date
+            const { data: attendance } = await supabaseClient
+                .from('daily_attendance')
+                .select('auto_status, total_hours')
+                .eq('labor_id', laborId)
+                .eq('date', date)
+                .single();
+
+            if (!attendance) return { success: false, error: 'No attendance record' };
+
+            // Only create draft if H or A with some hours (meaning they punched)
+            const hours = parseFloat(attendance.total_hours) || 0;
+            if (hours === 0) return { success: false, error: 'No punch - skip auto draft' };
+            if (attendance.auto_status === 'P') return { success: false, error: 'Already present' };
+
+            // Check if draft/request already exists
+            const { data: existing } = await supabaseClient
+                .from('lop_requests')
+                .select('id')
+                .eq('labor_id', laborId)
+                .eq('date', date)
+                .single();
+
+            if (existing) return { success: false, error: 'Request already exists' };
+
+            // Create draft
+            const requestedStatus = attendance.auto_status === 'A' ? 'H' : 'P';
+
+            const { data, error } = await supabaseClient
+                .from('lop_requests')
+                .insert({
+                    labor_id: laborId,
+                    department_id: departmentId,
+                    date: date,
+                    auto_status: attendance.auto_status,
+                    requested_status: requestedStatus,
+                    approval_status: 'draft',
+                    remarks: `Auto-suggested: Worked ${hours.toFixed(1)} hours`
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.log('Auto create draft:', error.message);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Get draft LOP requests (for Supervisor)
+    async getDrafts() {
+        try {
+            const departmentFilter = AUTH.getDepartmentFilter();
+
+            let query = supabaseClient
+                .from('lop_requests')
+                .select(`
+                    *,
+                    laborers:labor_id (name),
+                    requester:requested_by (name)
+                `)
+                .eq('approval_status', 'draft')
+                .order('date', { ascending: false });
+
+            if (departmentFilter) {
+                query = query.eq('department_id', departmentFilter);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return { success: true, data: data || [] };
+        } catch (error) {
+            console.error('Get drafts error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Confirm single draft (Supervisor)
+    async confirmDraft(id, remarks) {
+        try {
+            const session = AUTH.getSession();
+
+            const { data, error } = await supabaseClient
+                .from('lop_requests')
+                .update({
+                    approval_status: 'pending',
+                    remarks: remarks,
+                    requested_by: session.userId,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .eq('approval_status', 'draft')
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            await AUTH.logAction('CONFIRM_DRAFT', 'lop_requests', id, null, data);
+            return { success: true, data };
+        } catch (error) {
+            console.error('Confirm draft error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Bulk confirm drafts (Supervisor)
+    async bulkConfirmDrafts(ids, remarks) {
+        const results = { success: 0, failed: 0 };
+
+        for (const id of ids) {
+            const result = await this.confirmDraft(id, remarks);
+            if (result.success) {
+                results.success++;
+            } else {
+                results.failed++;
+            }
+        }
+
+        return results;
+    }
 };
+
