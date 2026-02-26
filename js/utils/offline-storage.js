@@ -68,11 +68,14 @@ const OfflineStorage = {
     async getUnsyncedPunches() {
         const tx = this.db.transaction('offlinePunches', 'readonly');
         const store = tx.objectStore('offlinePunches');
-        const index = store.index('synced');
 
         return new Promise((resolve, reject) => {
-            const request = index.getAll(false);
-            request.onsuccess = () => resolve(request.result || []);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const allPunches = request.result || [];
+                const unsynced = allPunches.filter(p => p.synced === false);
+                resolve(unsynced);
+            };
             request.onerror = () => reject(request.error);
         });
     },
@@ -234,4 +237,5 @@ const OfflineStorage = {
             request.onerror = () => reject(request.error);
         });
     }
+
 };
