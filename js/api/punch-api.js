@@ -200,12 +200,42 @@ const PunchAPI = {
     // Save punch record
     async savePunch(punch) {
         try {
+            // Determine correct date (handle night shift cutoff at 6:30 AM)
+            let punchDate = punch.date;
+            const punchTime = punch.time;
+            const [hours, minutes] = punchTime.split(':').map(Number);
+            const timeInMinutes = hours * 60 + minutes;
+            const cutoffInMinutes = 6 * 60 + 30; // 6:30 AM
+
+            // If punch is before 6:30 AM, check for open login from previous day
+            if (timeInMinutes < cutoffInMinutes) {
+                const yesterday = new Date(punch.date);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+                // Check if there's an unmatched login from yesterday
+                const { data: yesterdayPunches } = await supabaseClient
+                    .from('punch_records')
+                    .select('type')
+                    .eq('labor_id', punch.laborId)
+                    .eq('date', yesterdayStr)
+                    .order('time', { ascending: false });
+
+                if (yesterdayPunches && yesterdayPunches.length > 0) {
+                    const lastPunch = yesterdayPunches[0];
+                    if (lastPunch.type === 'login') {
+                        // Open login exists from yesterday - this punch belongs to yesterday
+                        punchDate = yesterdayStr;
+                    }
+                }
+            }
+
             const { data, error } = await supabaseClient
                 .from('punch_records')
                 .insert({
                     labor_id: punch.laborId,
                     department_id: punch.departmentId,
-                    date: punch.date,
+                    date: punchDate,
                     time: punch.time,
                     type: punch.type,
                     location_id: punch.locationId,
@@ -221,7 +251,7 @@ const PunchAPI = {
             // Update daily attendance
             await supabaseClient.rpc('update_daily_attendance', {
                 p_labor_id: punch.laborId,
-                p_date: punch.date
+                p_date: punchDate
             });
 
             // Auto-create draft LOP if hours < 10 (after a short delay to let attendance update)
@@ -454,4 +484,5 @@ const PunchAPI = {
     }
 
 };
+
 
