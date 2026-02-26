@@ -113,26 +113,47 @@
     <div class="tab" onclick="switchTab('create')" id="createTab">+ Create Request</div>
 </div>
 
-            <!-- Bulk Actions -->
-            <div class="bulk-actions" id="bulkActions">
-                <span><strong id="selectedCount">0</strong> selected</span>
-                <button type="button" class="btn btn-success btn-sm" onclick="bulkApprove()">✅ Approve Selected</button>
-                <button type="button" class="btn btn-danger btn-sm" onclick="bulkReject()">❌ Reject Selected</button>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear Selection</button>
-            </div>
+            <!-- Bulk Actions for Pending (Admin/Super Admin) -->
+<div class="bulk-actions" id="bulkActions">
+    <span><strong id="selectedCount">0</strong> selected</span>
+    <button type="button" class="btn btn-success btn-sm" onclick="bulkApprove()">✅ Approve Selected</button>
+    <button type="button" class="btn btn-danger btn-sm" onclick="bulkReject()">❌ Reject Selected</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear Selection</button>
+</div>
 
-            <!-- Pending Tab -->
-            <div class="tab-content active" id="pendingTab">
-                <div class="select-all-wrapper" id="selectAllWrapper" style="display: none;">
-                    <label class="checkbox-wrapper">
-                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
-                        <span>Select All</span>
-                    </label>
-                </div>
-                <div id="pendingList">
-                    <div class="text-center p-20 text-muted">Loading...</div>
-                </div>
-            </div>
+<!-- Bulk Actions for Drafts (Supervisor) -->
+<div class="bulk-actions" id="bulkDraftActions">
+    <span><strong id="selectedDraftCount">0</strong> selected</span>
+    <input type="text" id="bulkDraftRemarks" placeholder="Remarks for all selected..." class="form-control" style="width: 250px; display: inline-block; margin: 0 10px;">
+    <button type="button" class="btn btn-primary btn-sm" onclick="bulkConfirmDrafts()">📤 Confirm Selected</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="clearDraftSelection()">Clear</button>
+</div>
+
+            <!-- Drafts Tab (Supervisor confirms here) -->
+<div class="tab-content" id="draftsTab">
+    <div class="select-all-wrapper" id="selectAllDraftsWrapper" style="display: none;">
+        <label class="checkbox-wrapper">
+            <input type="checkbox" id="selectAllDrafts" onchange="toggleSelectAllDrafts()">
+            <span>Select All Drafts</span>
+        </label>
+    </div>
+    <div id="draftsList">
+        <div class="text-center p-20 text-muted">Loading...</div>
+    </div>
+</div>
+
+<!-- Pending Tab -->
+<div class="tab-content active" id="pendingTab">
+    <div class="select-all-wrapper" id="selectAllWrapper" style="display: none;">
+        <label class="checkbox-wrapper">
+            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+            <span>Select All</span>
+        </label>
+    </div>
+    <div id="pendingList">
+        <div class="text-center p-20 text-muted">Loading...</div>
+    </div>
+</div>
 
             <!-- Approved Tab -->
             <div class="tab-content" id="approvedTab">
@@ -230,11 +251,13 @@
         }
 
         const session = AUTH.getSession();
-        let pendingRequests = [];
-        let approvedRequests = [];
-        let rejectedRequests = [];
-        let laborers = [];
-        let selectedIds = new Set();
+        let draftRequests = [];
+let pendingRequests = [];
+let approvedRequests = [];
+let rejectedRequests = [];
+let laborers = [];
+let selectedIds = new Set();
+let selectedDraftIds = new Set();
 
         // Check if user can approve (admin/super_admin only)
         const canApprove = session.role === 'super_admin' || session.role === 'admin';
@@ -265,23 +288,27 @@
         }
 
         // Load requests
-        async function loadRequests() {
-            const [pending, approved, rejected] = await Promise.all([
-                LOPAPI.getAll('pending'),
-                LOPAPI.getAll('approved'),
-                LOPAPI.getAll('rejected')
-            ]);
+async function loadRequests() {
+    const [drafts, pending, approved, rejected] = await Promise.all([
+        LOPAPI.getDrafts(),
+        LOPAPI.getAll('pending'),
+        LOPAPI.getAll('approved'),
+        LOPAPI.getAll('rejected')
+    ]);
 
-            pendingRequests = pending.success ? pending.data : [];
-            approvedRequests = approved.success ? approved.data : [];
-            rejectedRequests = rejected.success ? rejected.data : [];
+    draftRequests = drafts.success ? drafts.data : [];
+    pendingRequests = pending.success ? pending.data : [];
+    approvedRequests = approved.success ? approved.data : [];
+    rejectedRequests = rejected.success ? rejected.data : [];
 
-            document.getElementById('pendingCount').textContent = pendingRequests.length;
+    document.getElementById('draftsCount').textContent = draftRequests.length;
+    document.getElementById('pendingCount').textContent = pendingRequests.length;
 
-            renderPendingList();
-            renderApprovedList();
-            renderRejectedList();
-        }
+    renderDraftsList();
+    renderPendingList();
+    renderApprovedList();
+    renderRejectedList();
+}
 
         // Populate labor dropdown
         function populateLaborDropdown() {
@@ -590,3 +617,4 @@
 </body>
 
 </html>
+
