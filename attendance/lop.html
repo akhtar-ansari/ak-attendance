@@ -321,22 +321,70 @@ async function loadRequests() {
         }
 
         // Switch tab
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-            event.target.classList.add('active');
-            document.getElementById(tabName + 'Tab').classList.add('active');
+    event.target.classList.add('active');
+    document.getElementById(tabName + 'Tab').classList.add('active');
 
-            // Show/hide bulk actions and select all
-            if (tabName === 'pending' && canApprove && pendingRequests.length > 0) {
-                document.getElementById('selectAllWrapper').style.display = 'block';
-            } else {
-                document.getElementById('selectAllWrapper').style.display = 'none';
-                document.getElementById('bulkActions').classList.remove('active');
-            }
-        }
+    // Hide all bulk actions first
+    document.getElementById('selectAllWrapper').style.display = 'none';
+    document.getElementById('selectAllDraftsWrapper').style.display = 'none';
+    document.getElementById('bulkActions').classList.remove('active');
+    document.getElementById('bulkDraftActions').classList.remove('active');
 
+    // Show relevant bulk actions
+    if (tabName === 'pending' && canApprove && pendingRequests.length > 0) {
+        document.getElementById('selectAllWrapper').style.display = 'block';
+    } else if (tabName === 'drafts' && draftRequests.length > 0) {
+        document.getElementById('selectAllDraftsWrapper').style.display = 'block';
+    }
+}
+// Render drafts list
+function renderDraftsList() {
+    const container = document.getElementById('draftsList');
+
+    if (draftRequests.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <h3>No Draft Requests</h3>
+                <p>Auto-suggested LOP requests will appear here.</p>
+            </div>
+        `;
+        document.getElementById('selectAllDraftsWrapper').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('selectAllDraftsWrapper').style.display = 'block';
+
+    container.innerHTML = draftRequests.map(req => `
+        <div class="request-card">
+            <div class="request-header">
+                <div>
+                    <label class="checkbox-wrapper" style="margin-bottom: 8px;">
+                        <input type="checkbox" class="draft-checkbox" value="${req.id}" onchange="updateDraftSelection()">
+                        <span></span>
+                    </label>
+                    <div class="request-labor">${req.laborers?.name || req.labor_id}</div>
+                    <div class="request-date">${req.labor_id} | ${DateUtils.formatDate(req.date)}</div>
+                </div>
+                <span class="badge badge-warning">Draft</span>
+            </div>
+            <div class="request-details">
+                <span>📊 Current: <strong>${req.auto_status}</strong></span>
+                <span>➡️ Suggested: <strong>${req.requested_status}</strong></span>
+            </div>
+            ${req.remarks ? `<div class="request-remarks">💬 ${req.remarks}</div>` : ''}
+            <div style="margin-top: 10px;">
+                <input type="text" class="form-control" id="remarks_${req.id}" placeholder="Add remarks..." style="margin-bottom: 10px;">
+                <button class="btn btn-sm btn-primary" onclick="confirmDraft('${req.id}')">📤 Confirm & Send for Approval</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteDraft('${req.id}')">🗑️ Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
         // Render pending list
         function renderPendingList() {
             const container = document.getElementById('pendingList');
@@ -610,11 +658,114 @@ async function loadRequests() {
                 Toast.error('Bulk reject failed');
             }
         }
+// Confirm single draft
+async function confirmDraft(id) {
+    const remarks = document.getElementById('remarks_' + id).value.trim();
+    
+    if (!remarks) {
+        Toast.error('Please add remarks');
+        return;
+    }
 
+    try {
+        SyncIndicator.show('Confirming...');
+        const result = await LOPAPI.confirmDraft(id, remarks);
+        if (result.success) {
+            Toast.success('Draft confirmed and sent for approval!');
+            await loadRequests();
+        } else {
+            throw new Error(result.error);
+        }
+        SyncIndicator.hide();
+    } catch (error) {
+        SyncIndicator.hide();
+        Toast.error('Failed: ' + error.message);
+    }
+}
+
+// Delete draft
+async function deleteDraft(id) {
+    if (!confirm('Delete this draft?')) return;
+
+    try {
+        SyncIndicator.show('Deleting...');
+        const result = await LOPAPI.delete(id);
+        if (result.success) {
+            Toast.success('Draft deleted!');
+            await loadRequests();
+        } else {
+            throw new Error(result.error);
+        }
+        SyncIndicator.hide();
+    } catch (error) {
+        SyncIndicator.hide();
+        Toast.error('Failed: ' + error.message);
+    }
+}
+
+// Draft selection functions
+function updateDraftSelection() {
+    selectedDraftIds.clear();
+    document.querySelectorAll('.draft-checkbox:checked').forEach(cb => {
+        selectedDraftIds.add(cb.value);
+    });
+    
+    document.getElementById('selectedDraftCount').textContent = selectedDraftIds.size;
+    
+    if (selectedDraftIds.size > 0) {
+        document.getElementById('bulkDraftActions').classList.add('active');
+    } else {
+        document.getElementById('bulkDraftActions').classList.remove('active');
+    }
+}
+
+function toggleSelectAllDrafts() {
+    const checked = document.getElementById('selectAllDrafts').checked;
+    document.querySelectorAll('.draft-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateDraftSelection();
+}
+
+function clearDraftSelection() {
+    document.getElementById('selectAllDrafts').checked = false;
+    document.querySelectorAll('.draft-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    selectedDraftIds.clear();
+    document.getElementById('bulkDraftActions').classList.remove('active');
+}
+
+// Bulk confirm drafts
+async function bulkConfirmDrafts() {
+    if (selectedDraftIds.size === 0) return;
+
+    const remarks = document.getElementById('bulkDraftRemarks').value.trim();
+    if (!remarks) {
+        Toast.error('Please enter remarks for bulk confirmation');
+        return;
+    }
+
+    if (!confirm(`Confirm ${selectedDraftIds.size} drafts and send for approval?`)) return;
+
+    try {
+        SyncIndicator.show('Confirming...');
+        const result = await LOPAPI.bulkConfirmDrafts(Array.from(selectedDraftIds), remarks);
+        Toast.success(`Confirmed: ${result.success}, Failed: ${result.failed}`);
+        clearDraftSelection();
+        document.getElementById('bulkDraftRemarks').value = '';
+        await loadRequests();
+        SyncIndicator.hide();
+    } catch (error) {
+        SyncIndicator.hide();
+        Toast.error('Bulk confirm failed');
+    }
+}
         // Initialize
         loadData();
     </script>
 </body>
 
 </html>
+
 
