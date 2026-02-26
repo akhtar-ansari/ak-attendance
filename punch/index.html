@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AK Punch Terminal</title>
+  <title>AK Punch Terminal</title>
+    <link rel="manifest" href="../manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -218,6 +222,8 @@
     <script src="../js/config/supabase.js"></script>
     <script src="../js/utils/date-utils.js"></script>
     <script src="../js/utils/photo-utils.js"></script>
+    <script src="../js/utils/offline-storage.js"></script>
+    <script src="../js/utils/sync-manager.js"></script>
     <script src="../js/api/labor-api.js"></script>
     <script src="../js/api/punch-api.js"></script>
 
@@ -235,21 +241,33 @@
         let currentLocation = null;
         let allLaborers = [];
         let settings = {};
+        let isOfflineMode = false;
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js')
+                .then(reg => console.log('[PWA] Service Worker registered'))
+                .catch(err => console.log('[PWA] SW registration failed:', err));
+        }
 
         // Initialize
         window.onload = async function() {
-            // Check internet
-            if (!navigator.onLine) {
-                document.getElementById('noInternet').classList.add('active');
-                return;
-            }
+            // Initialize offline storage
+            await OfflineStorage.init();
 
             // Start clock
             updateDateTime();
             setInterval(updateDateTime, 1000);
 
-            // Load data
-            await loadInitialData();
+            // Check internet and load data accordingly
+            if (navigator.onLine) {
+                isOfflineMode = false;
+                await loadInitialData();
+                await SyncManager.init();
+            } else {
+                isOfflineMode = true;
+                await loadOfflineData();
+            }
             
             // Load face models
             await loadFaceModels();
@@ -272,14 +290,14 @@
             });
         }
 
-        // Load initial data
+        // Load initial data (online)
         async function loadInitialData() {
             try {
                 // Load all active laborers with face enrolled
                 const result = await LaborAPI.getActive();
                 if (result.success) {
                     allLaborers = result.data.filter(l => l.face_enrolled);
-                    console.log(`Loaded ${allLaborers.length} laborers with face enrolled`);
+                    console.log(`[Online] Loaded ${allLaborers.length} laborers`);
                 }
 
                 // Load settings
@@ -287,8 +305,45 @@
                 if (settingsData) {
                     settingsData.forEach(s => settings[s.key] = s.value);
                 }
+
+                // Save to offline storage for later use
+                await SyncManager.downloadFaceDescriptors();
+                await SyncManager.downloadPunchLocations();
             } catch (error) {
                 console.error('Failed to load data:', error);
+                // Fallback to offline data
+                await loadOfflineData();
+            }
+        }
+
+        // Load offline data (from IndexedDB)
+        async function loadOfflineData() {
+            try {
+                console.log('[Offline] Loading cached data...');
+                
+                // Load face descriptors
+                const descriptors = await OfflineStorage.getAllFaceDescriptors();
+                allLaborers = descriptors.map(d => ({
+                    labor_id: d.laborId,
+                    name: d.name,
+                    department_id: d.departmentId,
+                    face_descriptor: d.descriptor,
+                    face_enrolled: true
+                }));
+                console.log(`[Offline] Loaded ${allLaborers.length} laborers from cache`);
+
+                // Load settings from cache
+                const cachedConfidence = await OfflineStorage.getSetting('confidence_threshold');
+                if (cachedConfidence) settings.confidence_threshold = cachedConfidence;
+                
+                const cachedReenroll = await OfflineStorage.getSetting('reenrollment_threshold');
+                if (cachedReenroll) settings.reenrollment_threshold = cachedReenroll;
+
+                if (allLaborers.length === 0) {
+                    updateLocationBar('⚠️ No offline data. Connect to WiFi first.', false);
+                }
+            } catch (error) {
+                console.error('[Offline] Failed to load cached data:', error);
             }
         }
 
@@ -380,11 +435,23 @@
 
             // Check location for labor's department
             if (window.userCoords) {
-                const locResult = await PunchAPI.findNearestLocation(
-                    window.userCoords.lat,
-                    window.userCoords.lng,
-                    labor.department_id
-                );
+                let locResult;
+                
+                if (isOfflineMode) {
+                    // Offline: check from cached locations
+                    locResult = await findNearestLocationOffline(
+                        window.userCoords.lat,
+                        window.userCoords.lng,
+                        labor.department_id
+                    );
+                } else {
+                    // Online: check from server
+                    locResult = await PunchAPI.findNearestLocation(
+                        window.userCoords.lat,
+                        window.userCoords.lng,
+                        labor.department_id
+                    );
+                }
 
                 if (locResult.success) {
                     currentLocation = locResult.location;
@@ -405,6 +472,53 @@
             document.getElementById('idInputPanel').classList.add('hidden');
             document.getElementById('punchBtn').style.display = 'block';
         }
+// Find nearest location offline
+        async function findNearestLocationOffline(userLat, userLng, departmentId) {
+            try {
+                const locations = await OfflineStorage.getPunchLocations();
+                const deptLocations = locations.filter(l => l.department_id === departmentId && l.status === 'active');
+
+                if (deptLocations.length === 0) {
+                    return { success: false, error: 'No locations configured for department' };
+                }
+
+                let nearestLocation = null;
+                let minDistance = Infinity;
+
+                for (const loc of deptLocations) {
+                    const distance = calculateDistance(
+                        userLat, userLng,
+                        parseFloat(loc.latitude), parseFloat(loc.longitude)
+                    );
+
+                    if (distance <= loc.radius && distance < minDistance) {
+                        minDistance = distance;
+                        nearestLocation = { ...loc, distance: Math.round(distance) };
+                    }
+                }
+
+                if (nearestLocation) {
+                    return { success: true, location: nearestLocation };
+                } else {
+                    return { success: false, error: 'Outside punch area' };
+                }
+            } catch (error) {
+                console.error('Offline location check error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        // Calculate distance between coordinates (meters)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
 
         // Show ID error
         function showIdError(message) {
@@ -423,12 +537,6 @@
 
             if (!modelsLoaded) {
                 showStatus('⏳', 'Please Wait', '', 'AI models still loading...', 'error');
-                return;
-            }
-
-            // Check internet
-            if (!navigator.onLine) {
-                showStatus('📡', 'No Internet', '', 'Please check your connection', 'error');
                 return;
             }
 
@@ -480,13 +588,17 @@
                 // Determine punch type
                 showStatus('💾', 'Saving', '', 'Recording punch...', 'info');
                 
-                const punchType = await PunchAPI.getNextPunchType(currentLabor.labor_id);
-
-                // Upload photo
-                let photoUrl = null;
-                const uploadResult = await PunchAPI.uploadPhoto(currentLabor.labor_id, photoBlob);
-                if (uploadResult.success) {
-                    photoUrl = uploadResult.url;
+                let punchType;
+                if (isOfflineMode) {
+                    // Offline: determine from local storage
+                    const unsyncedPunches = await OfflineStorage.getUnsyncedPunches();
+                    const todayPunches = unsyncedPunches.filter(p => 
+                        p.laborId === currentLabor.labor_id && p.date === DateUtils.today()
+                    );
+                    const lastPunch = todayPunches[todayPunches.length - 1];
+                    punchType = (!lastPunch || lastPunch.type === 'logout') ? 'login' : 'logout';
+                } else {
+                    punchType = await PunchAPI.getNextPunchType(currentLabor.labor_id);
                 }
 
                 // Save punch record
@@ -500,13 +612,30 @@
                     locationId: currentLocation.id,
                     locationName: currentLocation.name,
                     confidence: confidence,
-                    photoUrl: photoUrl
+                    photoBlob: photoBlob
                 };
 
-                const saveResult = await PunchAPI.savePunch(punchData);
+                if (isOfflineMode || !navigator.onLine) {
+                    // Save offline
+                    await OfflineStorage.savePunch(punchData);
+                    console.log('[Offline] Punch saved locally');
+                } else {
+                    // Save online
+                    let photoUrl = null;
+                    const uploadResult = await PunchAPI.uploadPhoto(currentLabor.labor_id, photoBlob);
+                    if (uploadResult.success) {
+                        photoUrl = uploadResult.url;
+                    }
+                    punchData.photoUrl = photoUrl;
+                    delete punchData.photoBlob;
 
-                if (!saveResult.success) {
-                    throw new Error('Failed to save punch. Please try again.');
+                    const saveResult = await PunchAPI.savePunch(punchData);
+                    if (!saveResult.success) {
+                        // Fallback to offline save
+                        punchData.photoBlob = photoBlob;
+                        await OfflineStorage.savePunch(punchData);
+                        console.log('[Fallback] Punch saved offline');
+                    }
                 }
 
                 // Success
@@ -576,15 +705,22 @@
         });
 
         // Internet status
-        window.addEventListener('online', () => {
+        window.addEventListener('online', async () => {
+            console.log('[PWA] Online detected');
+            isOfflineMode = false;
             document.getElementById('noInternet').classList.remove('active');
-            loadInitialData();
+            await loadInitialData();
+            await SyncManager.syncAll();
         });
 
         window.addEventListener('offline', () => {
-            document.getElementById('noInternet').classList.add('active');
+            console.log('[PWA] Offline detected');
+            isOfflineMode = true;
+            // Don't show noInternet - app works offline now!
+            updateLocationBar('📴 Offline Mode - Punches will sync later', true);
         });
     </script>
 </body>
 </html>
+
 
