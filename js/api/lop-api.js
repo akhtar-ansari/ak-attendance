@@ -5,7 +5,7 @@ const LOPAPI = {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
             
-            let query = supabase
+            let query = supabaseClient
                 .from('lop_requests')
                 .select(`
                     *,
@@ -41,7 +41,7 @@ const LOPAPI = {
     // Get LOP requests for a specific laborer
     async getByLaborer(laborId) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('lop_requests')
                 .select(`
                     *,
@@ -65,7 +65,7 @@ const LOPAPI = {
             const session = AUTH.getSession();
 
             // Check if request already exists for this date
-            const { data: existing } = await supabase
+            const { data: existing } = await supabaseClient
                 .from('lop_requests')
                 .select('id')
                 .eq('labor_id', request.laborId)
@@ -76,7 +76,7 @@ const LOPAPI = {
                 return { success: false, error: 'LOP request already exists for this date' };
             }
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('lop_requests')
                 .insert({
                     labor_id: request.laborId,
@@ -108,7 +108,7 @@ const LOPAPI = {
             const session = AUTH.getSession();
 
             // Get current request
-            const { data: current } = await supabase
+            const { data: current } = await supabaseClient
                 .from('lop_requests')
                 .select('*')
                 .eq('id', requestId)
@@ -121,7 +121,7 @@ const LOPAPI = {
             const finalStatus = approvedStatus || current.requested_status;
 
             // Update LOP request
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('lop_requests')
                 .update({
                     approval_status: 'approved',
@@ -135,7 +135,7 @@ const LOPAPI = {
             if (error) throw error;
 
             // Update daily attendance final_status
-            await supabase
+            await supabaseClient
                 .from('daily_attendance')
                 .update({
                     final_status: finalStatus,
@@ -158,13 +158,13 @@ const LOPAPI = {
         try {
             const session = AUTH.getSession();
 
-            const { data: current } = await supabase
+            const { data: current } = await supabaseClient
                 .from('lop_requests')
                 .select('*')
                 .eq('id', requestId)
                 .single();
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('lop_requests')
                 .update({
                     approval_status: 'rejected',
@@ -227,7 +227,7 @@ const LOPAPI = {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
 
             // Get daily attendance records with H or A status
-            let query = supabase
+            let query = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, department_id, date, auto_status')
                 .eq('date', date)
@@ -244,7 +244,7 @@ const LOPAPI = {
             let created = 0;
             for (const record of records || []) {
                 // Check if LOP request already exists
-                const { data: existing } = await supabase
+                const { data: existing } = await supabaseClient
                     .from('lop_requests')
                     .select('id')
                     .eq('labor_id', record.labor_id)
@@ -252,7 +252,7 @@ const LOPAPI = {
                     .single();
 
                 if (!existing) {
-                    await supabase
+                    await supabaseClient
                         .from('lop_requests')
                         .insert({
                             labor_id: record.labor_id,
@@ -273,4 +273,5 @@ const LOPAPI = {
             return { success: false, error: error.message };
         }
     }
+
 };
