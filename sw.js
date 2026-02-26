@@ -1,5 +1,5 @@
 // AK Attendance - Service Worker
-const CACHE_NAME = 'ak-attendance-v1';
+const CACHE_NAME = 'ak-attendance-v2';
 const OFFLINE_PUNCHES_KEY = 'ak_offline_punches';
 const FACE_DESCRIPTORS_KEY = 'ak_face_descriptors';
 const PUNCH_LOCATIONS_KEY = 'ak_punch_locations';
@@ -113,4 +113,5 @@ self.addEventListener('message', event => {
 self.addEventListener('online', () => {
   console.log('[SW] Online detected, triggering sync...');
   self.registration.sync.register('sync-punches');
+
 });
