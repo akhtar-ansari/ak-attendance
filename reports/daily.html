@@ -79,11 +79,9 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Labor</label>
-                        <select id="laborFilter" class="form-control">
-                            <option value="">All Laborers</option>
-                        </select>
-                    </div>
+    <label>Search by Labor ID or Iqama</label>
+    <input type="text" id="laborFilter" class="form-control" placeholder="Leave empty for all laborers">
+</div>
                 </div>
                 <div class="action-buttons" style="margin-top: 15px;">
                     <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
@@ -233,7 +231,7 @@
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
             const departmentId = document.getElementById('departmentFilter').value;
-            const laborId = document.getElementById('laborFilter').value;
+            const laborSearch = document.getElementById('laborFilter').value.trim();
 
             if (!fromDate || !toDate) {
                 Toast.error('Please select date range');
@@ -433,4 +431,5 @@
         loadFilters();
     </script>
 </body>
+
 </html>
