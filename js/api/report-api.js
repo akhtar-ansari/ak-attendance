@@ -136,14 +136,27 @@ const ReportAPI = {
                     let status = attendanceMap[key] || null;
 
                     if (isFriday) {
-                        // Friday logic - check if it should be absent
-                        // (last working day rule - simplified: if no attendance record and before DOJ, mark A)
                         if (isBeforeDOJ) {
                             status = 'A';
                             absentCount++;
                         } else {
-                            status = '-'; // Paid holiday
-                            fridayCount++;
+                            // Sandwich rule: Thu Absent + Sat Absent = Fri Absent
+                            const thursdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day - 1).padStart(2, '0')}`;
+                            const saturdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day + 1).padStart(2, '0')}`;
+                            
+                            const thursdayKey = `${laborer.labor_id}_${thursdayStr}`;
+                            const saturdayKey = `${laborer.labor_id}_${saturdayStr}`;
+                            
+                            const thursdayStatus = attendanceMap[thursdayKey] || 'A';
+                            const saturdayStatus = day + 1 <= lastDay ? (attendanceMap[saturdayKey] || 'A') : 'A';
+                            
+                            if (thursdayStatus === 'A' && saturdayStatus === 'A') {
+                                status = 'A';
+                                absentCount++;
+                            } else {
+                                status = '-';
+                                fridayCount++;
+                            }
                         }
                     } else if (isBeforeDOJ) {
                         status = 'A';
@@ -279,3 +292,4 @@ const ReportAPI = {
     }
 
 };
+
