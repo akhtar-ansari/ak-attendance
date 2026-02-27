@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: #000; overflow: hidden; height: 100vh; }
@@ -455,6 +457,7 @@
     <script src="../js/utils/sync-manager.js"></script>
     <script src="../js/api/labor-api.js"></script>
     <script src="../js/api/punch-api.js"></script>
+    <script src="../js/utils/push-notifications.js"></script>
 
     <script>
         // Minimal AUTH object for punch terminal (no login required)
@@ -1143,7 +1146,18 @@ async function detectFaceForAttendance() {
                 }
 
                 // Show modal
-                document.getElementById('attendanceModal').classList.add('active');
+document.getElementById('attendanceModal').classList.add('active');
+
+// Request push notification permission (one-time)
+if (Notification.permission === 'default') {
+    const initialized = await PushNotifications.init();
+    if (initialized) {
+        const token = await PushNotifications.requestPermission();
+        if (token) {
+            await PushNotifications.saveToken(labor.labor_id, token);
+        }
+    }
+}
 
             } catch (error) {
                 console.error('Failed to load attendance:', error);
