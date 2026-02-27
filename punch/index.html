@@ -578,20 +578,21 @@
         }
 
         // Load face models
-        async function loadFaceModels() {
-            try {
-                const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-                modelsLoaded = true;
-                console.log('✅ Face models loaded');
-            } catch (error) {
-                console.error('Failed to load face models:', error);
-            }
-        }
+async function loadFaceModels() {
+    try {
+        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+        modelsLoaded = true;
+        console.log('✅ Face models loaded');
+    } catch (error) {
+        console.error('Failed to load face models:', error);
+        modelsLoaded = true; // Allow anyway, will fail on detection
+    }
+}
 
         // Start camera
         async function startCamera() {
