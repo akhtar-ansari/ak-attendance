@@ -1094,11 +1094,11 @@ async function detectFaceForAttendance() {
             try {
                 const todayStr = DateUtils.today();
                 const { data: punches, error } = await supabaseClient
-                    .from('punch_records')
-                    .select('*')
-                    .eq('labor_id', labor.labor_id)
-                    .eq('date', todayStr)
-                    .order('time', { ascending: true });
+    .from('punch_records')
+    .select('*')
+    .eq('labor_id', labor.labor_id)
+    .eq('date', todayStr)
+    .order('created_at', { ascending: true });
 
                 if (error) throw error;
 
