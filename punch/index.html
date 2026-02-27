@@ -1162,22 +1162,20 @@ async function detectFaceForAttendance() {
         }
 
         // Calculate attendance
-        function calculateAttendance(punches) {
-            let totalMinutes = 0;
-            let loginTime = null;
+function calculateAttendance(punches) {
+    let totalMinutes = 0;
 
-            for (const punch of punches) {
-                if (punch.type === 'login') {
-                    loginTime = punch.time;
-                } else if (punch.type === 'logout' && loginTime) {
-                    const [lh, lm] = loginTime.split(':').map(Number);
-                    const [oh, om] = punch.time.split(':').map(Number);
-                    const loginMinutes = lh * 60 + lm;
-                    const logoutMinutes = oh * 60 + om;
-                    totalMinutes += (logoutMinutes - loginMinutes);
-                    loginTime = null;
-                }
-            }
+    // Find first login and last logout
+    const firstLogin = punches.find(p => p.type === 'login');
+    const lastLogout = [...punches].reverse().find(p => p.type === 'logout');
+
+    if (firstLogin && lastLogout) {
+        const [lh, lm] = firstLogin.time.split(':').map(Number);
+        const [oh, om] = lastLogout.time.split(':').map(Number);
+        const loginMinutes = lh * 60 + lm;
+        const logoutMinutes = oh * 60 + om;
+        totalMinutes = logoutMinutes - loginMinutes;
+    }
 
             const hours = Math.floor(totalMinutes / 60);
             const minutes = totalMinutes % 60;
