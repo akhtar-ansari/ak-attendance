@@ -3,1193 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AK Punch Terminal</title>
-    <link rel="manifest" href="../manifest.json">
-    <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <title>AK Attendance - Login</title>
+    <link rel="stylesheet" href="css/main.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: #000; overflow: hidden; height: 100vh; }
-        
-        .punch-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-        
-        .top-bar {
-            background: rgba(0,0,0,0.9);
-            color: white;
-            padding: 15px 25px;
+        body {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            z-index: 10;
+            justify-content: center;
+            min-height: 100vh;
         }
-        .logo-section { display: flex; flex-direction: column; }
-        .logo { font-size: 20px; font-weight: bold; color: #667eea; }
-        .view-attendance-link {
-            font-size: 13px;
-            color: #48bb78;
-            cursor: pointer;
-            margin-top: 4px;
-            text-decoration: underline;
-        }
-        .view-attendance-link:hover { color: #68d391; }
-        .datetime { text-align: right; }
-        .time { font-size: 28px; font-weight: bold; }
-        .date { font-size: 13px; color: #aaa; }
-        
-        .camera-section { flex: 1; position: relative; background: #000; }
-        #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        #canvas { display: none; }
-        
-        .face-guide {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -55%);
-            width: 280px;
-            height: 360px;
-            border: 4px solid #48bb78;
-            border-radius: 180px;
-            box-shadow: 0 0 40px rgba(72, 187, 120, 0.4);
-            pointer-events: none;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 0.5; box-shadow: 0 0 40px rgba(72, 187, 120, 0.4); }
-            50% { opacity: 1; box-shadow: 0 0 60px rgba(72, 187, 120, 0.6); }
-        }
-        
-        .id-input-panel {
-            position: absolute;
-            top: 12%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.9);
-            padding: 30px;
+        .login-container {
+            background: white;
+            padding: 50px;
             border-radius: 15px;
-            z-index: 5;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             width: 90%;
-            max-width: 380px;
+            max-width: 400px;
+        }
+        .logo {
             text-align: center;
+            margin-bottom: 30px;
         }
-        .id-input-panel h2 { color: white; margin-bottom: 20px; font-size: 20px; }
-        .id-input-panel input {
-            width: 100%;
-            padding: 15px;
-            font-size: 20px;
-            border: 2px solid #667eea;
-            border-radius: 10px;
-            text-align: center;
-            text-transform: uppercase;
-            outline: none;
+        .logo-icon {
+            font-size: 60px;
+            margin-bottom: 10px;
         }
-        .id-input-panel input:focus { border-color: #48bb78; }
-        .id-input-panel button {
-            width: 100%;
-            margin-top: 15px;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
+        .logo h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 5px;
         }
-        .id-error { color: #f56565; margin-top: 12px; font-size: 14px; display: none; }
-        
-        .location-bar {
-            position: absolute;
-            bottom: 180px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 25px;
+        .logo p {
+            color: #999;
             font-size: 14px;
-            z-index: 5;
         }
-        .location-bar.valid { background: rgba(72, 187, 120, 0.9); }
-        .location-bar.invalid { background: rgba(245, 101, 101, 0.9); }
-        
-        .punch-btn {
-            position: absolute;
-            bottom: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 130px;
-            height: 130px;
-            border-radius: 50%;
-            border: 6px solid white;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            z-index: 10;
-            display: none;
+        .login-form .form-group {
+            margin-bottom: 20px;
         }
-        .punch-btn:active { transform: translateX(-50%) scale(0.95); }
-        .punch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .status-overlay {
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
+        .login-form .btn {
             width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 100;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            color: white;
-        }
-        .status-overlay.active { display: flex; }
-        .status-icon { font-size: 80px; margin-bottom: 20px; }
-        .status-title { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
-        .status-time { font-size: 56px; font-weight: bold; margin: 20px 0; }
-        .status-details { font-size: 18px; line-height: 1.8; color: #ccc; }
-        .status-time.success { color: #48bb78; }
-        .status-time.error { color: #f56565; }
-        
-        .hidden { display: none !important; }
-        
-        .no-internet {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(245, 101, 101, 0.95);
-            color: white;
-            padding: 30px 50px;
-            border-radius: 15px;
-            text-align: center;
-            z-index: 200;
-            display: none;
-        }
-        .no-internet.active { display: block; }
-
-        /* Attendance Modal */
-        .attendance-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 300;
-            overflow-y: auto;
-        }
-        .attendance-modal.active { display: block; }
-        
-        .attendance-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        .attendance-header h2 { font-size: 18px; margin: 0; }
-        .attendance-close {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            font-size: 24px;
-            cursor: pointer;
-        }
-        
-        .attendance-info {
-            background: rgba(102, 126, 234, 0.2);
-            padding: 15px 20px;
-            color: white;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .attendance-info .name { font-size: 18px; font-weight: bold; }
-        .attendance-info .date { font-size: 14px; color: #aaa; margin-top: 5px; }
-        
-        .attendance-list {
             padding: 15px;
-        }
-        
-        .punch-item {
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .punch-type {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-        .punch-type.login { background: rgba(72, 187, 120, 0.2); }
-        .punch-type.logout { background: rgba(245, 101, 101, 0.2); }
-        
-        .punch-details {
-            flex: 1;
-            color: white;
-        }
-        .punch-details .type-label { 
-            font-size: 14px; 
-            font-weight: bold;
-            color: #48bb78;
-        }
-        .punch-details .type-label.logout { color: #f56565; }
-        .punch-details .time { font-size: 20px; font-weight: bold; margin: 4px 0; }
-        .punch-details .location { font-size: 13px; color: #aaa; }
-        
-        .punch-photo {
-            width: 60px;
-            height: 60px;
-            border-radius: 10px;
-            object-fit: cover;
-            cursor: pointer;
-            border: 2px solid rgba(255,255,255,0.2);
-        }
-        .punch-photo:hover { border-color: #667eea; }
-        
-        .attendance-summary {
-            background: rgba(102, 126, 234, 0.2);
-            padding: 20px;
-            margin: 15px;
-            border-radius: 12px;
-            color: white;
-            text-align: center;
-        }
-        .summary-hours { font-size: 32px; font-weight: bold; }
-        .summary-status { 
-            font-size: 18px; 
-            margin-top: 10px;
-            padding: 8px 20px;
-            border-radius: 20px;
-            display: inline-block;
-        }
-        .summary-status.present { background: #48bb78; }
-        .summary-status.half-day { background: #ecc94b; color: #333; }
-        .summary-status.absent { background: #f56565; }
-        .summary-warning { font-size: 14px; color: #ecc94b; margin-top: 10px; }
-        
-        .no-punches {
-            color: #aaa;
-            text-align: center;
-            padding: 50px 20px;
             font-size: 16px;
         }
-
-        /* Full screen photo */
-        .fullscreen-photo {
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.98);
-            z-index: 400;
-            align-items: center;
-            justify-content: center;
         }
-        .fullscreen-photo.active { display: flex; }
-        .fullscreen-photo img {
-            max-width: 95%;
-            max-height: 95%;
-            border-radius: 10px;
+        .error-message.active {
+            display: block;
         }
-        .fullscreen-photo .close-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            font-size: 30px;
-            cursor: pointer;
-        }
-
-        /* Verifying overlay for attendance */
-        .verifying-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 250;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
+        .version {
             text-align: center;
-        }
-        .verifying-overlay.active { display: flex; }
-        .verifying-overlay .icon { font-size: 60px; margin-bottom: 20px; }
-        .verifying-overlay .message { font-size: 20px; }
-        .verifying-overlay .cancel-btn {
-            margin-top: 30px;
-            padding: 12px 40px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.3);
-            color: white;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
+            margin-top: 20px;
+            color: #999;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
-    <div class="punch-container">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="logo-section">
-                <div class="logo">🏢 AK ATTENDANCE</div>
-                <div class="view-attendance-link" onclick="openViewAttendance()">📊 View My Attendance</div>
-            </div>
-            <div class="datetime">
-                <div class="time" id="currentTime">00:00:00</div>
-                <div class="date" id="currentDate">Loading...</div>
-            </div>
+    <div class="login-container">
+        <div class="logo">
+            <div class="logo-icon">🏢</div>
+            <h1>AK ATTENDANCE</h1>
+            <p>Warehouse Management System</p>
         </div>
 
-        <!-- Camera Section -->
-        <div class="camera-section">
-            <video id="video" autoplay playsinline></video>
-            <canvas id="canvas"></canvas>
-            <div class="face-guide" id="faceGuide"></div>
-            
-            <!-- ID Input Panel -->
-            <div class="id-input-panel" id="idInputPanel">
-                <h2>👤 Enter Your Labor ID</h2>
-                <input type="text" id="laborIdInput" placeholder="e.g., L1" maxlength="10" autofocus>
-                <button type="button" onclick="verifyLaborId()">✓ Verify ID</button>
-                <div class="id-error" id="idError"></div>
-            </div>
-            
-            <!-- Location Bar -->
-            <div class="location-bar" id="locationBar">📍 Detecting location...</div>
-            
-            <!-- Punch Button -->
-            <button type="button" class="punch-btn" id="punchBtn" onclick="processPunch()">PUNCH</button>
-        </div>
+        <div id="errorMsg" class="error-message"></div>
 
-        <!-- Status Overlay -->
-        <div class="status-overlay" id="statusOverlay">
-            <div class="status-icon" id="statusIcon">✅</div>
-            <div class="status-title" id="statusTitle">Success</div>
-            <div class="status-time" id="statusTime">08:30</div>
-            <div class="status-details" id="statusDetails"></div>
-        </div>
-
-        <!-- No Internet Warning -->
-        <div class="no-internet" id="noInternet">
-            <div style="font-size: 48px; margin-bottom: 15px;">📡</div>
-            <h2>No Internet Connection</h2>
-            <p style="margin-top: 10px;">Please check your network and refresh.</p>
-        </div>
-
-        <!-- Verifying Overlay for Attendance -->
-        <div class="verifying-overlay" id="verifyingOverlay">
-            <div class="icon">🔍</div>
-            <div class="message" id="verifyingMessage">Verifying your face...</div>
-            <button class="cancel-btn" onclick="cancelViewAttendance()">Cancel</button>
-        </div>
-
-        <!-- Attendance Modal -->
-        <div class="attendance-modal" id="attendanceModal">
-            <div class="attendance-header">
-                <h2>📊 My Attendance Today</h2>
-                <button class="attendance-close" onclick="closeAttendanceModal()">✕</button>
+        <form class="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" class="form-control" required autofocus placeholder="Enter username">
             </div>
-            <div class="attendance-info" id="attendanceInfo">
-                <div class="name">Loading...</div>
-                <div class="date"></div>
-            </div>
-            <div class="attendance-list" id="attendanceList">
-                <!-- Punch items will be loaded here -->
-            </div>
-            <div class="attendance-summary" id="attendanceSummary">
-                <!-- Summary will be loaded here -->
-            </div>
-        </div>
 
-        <!-- Fullscreen Photo -->
-        <div class="fullscreen-photo" id="fullscreenPhoto">
-            <button class="close-btn" onclick="closeFullscreenPhoto()">✕</button>
-            <img id="fullscreenImg" src="" alt="Punch Photo">
-        </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="password" class="form-control" required placeholder="Enter password">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="loginBtn">
+                Login
+            </button>
+        </form>
+
+        <div class="version">Version 2.0</div>
     </div>
 
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+    
     <!-- App Scripts -->
-    <script src="../js/config/supabase.js"></script>
-    <script src="../js/utils/date-utils.js"></script>
-    <script src="../js/utils/photo-utils.js"></script>
-    <script src="../js/utils/offline-storage.js"></script>
-    <script src="../js/utils/sync-manager.js"></script>
-    <script src="../js/api/labor-api.js"></script>
-    <script src="../js/api/punch-api.js"></script>
+    <script src="js/config/supabase.js"></script>
+    <script src="js/auth/auth.js"></script>
+    <script src="js/ui/toast.js"></script>
 
     <script>
-        // Minimal AUTH object for punch terminal (no login required)
-        const AUTH = {
-            getSession: () => null,
-            getDepartmentFilter: () => null,
-            logAction: async () => {}
-        };
-
-        let modelsLoaded = false;
-        let stream = null;
-        let currentLabor = null;
-        let currentLocation = null;
-        let allLaborers = [];
-        let settings = {};
-        let isOfflineMode = false;
-        let isViewingAttendance = false;
-
-        // Register Service Worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('../sw.js')
-                .then(reg => console.log('[PWA] Service Worker registered'))
-                .catch(err => console.log('[PWA] SW registration failed:', err));
+        // Check if already logged in
+        if (AUTH.isLoggedIn()) {
+            window.location.href = 'dashboard.html';
         }
 
-        // Initialize
-        window.onload = async function() {
-            // Initialize offline storage
-            await OfflineStorage.init();
+        async function handleLogin(event) {
+            event.preventDefault();
 
-            // Start clock
-            updateDateTime();
-            setInterval(updateDateTime, 1000);
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
 
-            // Check internet and load data accordingly
-            if (navigator.onLine) {
-                isOfflineMode = false;
-                await loadInitialData();
-                await SyncManager.init();
-            } else {
-                isOfflineMode = true;
-                await loadOfflineData();
-            }
+            // Clear previous error
+            errorMsg.classList.remove('active');
 
-            // Load face models
-            await loadFaceModels();
-            
-            // Start camera
-            await startCamera();
-            
-            // Detect location
-            detectLocation();
-        };
+            // Disable button
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
 
-        // Update date time
-        function updateDateTime() {
-            const now = new Date();
-            document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-US', {
-                hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-            document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', {
-                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-            });
-        }
-
-        // Load initial data (online)
-        async function loadInitialData() {
             try {
-                // Load all active laborers with face enrolled
-                const result = await LaborAPI.getActive();
+                // Test connection first
+                const connected = await testConnection();
+                if (!connected) {
+                    throw new Error('Cannot connect to server. Check internet connection.');
+                }
+
+                // Attempt login
+                const result = await AUTH.login(username, password);
+
                 if (result.success) {
-                    allLaborers = result.data.filter(l => l.face_enrolled);
-                    console.log(`[Online] Loaded ${allLaborers.length} laborers`);
-                }
-
-                // Load settings
-                const { data: settingsData } = await supabaseClient.from('settings').select('*');
-                if (settingsData) {
-                    settingsData.forEach(s => settings[s.key] = s.value);
-                }
-
-                // Save to offline storage for later use
-                await SyncManager.downloadFaceDescriptors();
-                await SyncManager.downloadPunchLocations();
-            } catch (error) {
-                console.error('Failed to load data:', error);
-                // Fallback to offline data
-                await loadOfflineData();
-            }
-        }
-
-        // Load offline data (from IndexedDB)
-        async function loadOfflineData() {
-            try {
-                console.log('[Offline] Loading cached data...');
-                
-                // Load face descriptors
-                const descriptors = await OfflineStorage.getAllFaceDescriptors();
-                allLaborers = descriptors.map(d => ({
-                    labor_id: d.laborId,
-                    name: d.name,
-                    department_id: d.departmentId,
-                    face_descriptor: d.descriptor,
-                    face_enrolled: true
-                }));
-                console.log(`[Offline] Loaded ${allLaborers.length} laborers from cache`);
-
-                // Load settings from cache
-                const cachedConfidence = await OfflineStorage.getSetting('confidence_threshold');
-                if (cachedConfidence) settings.confidence_threshold = cachedConfidence;
-                
-                const cachedReenroll = await OfflineStorage.getSetting('reenrollment_threshold');
-                if (cachedReenroll) settings.reenrollment_threshold = cachedReenroll;
-
-                if (allLaborers.length === 0) {
-                    updateLocationBar('⚠️ No offline data. Connect to WiFi first.', false);
-                }
-            } catch (error) {
-                console.error('[Offline] Failed to load cached data:', error);
-            }
-        }
-
-        // Load face models
-        async function loadFaceModels() {
-            try {
-                const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-                modelsLoaded = true;
-                console.log('✅ Face models loaded');
-            } catch (error) {
-                console.error('Failed to load face models:', error);
-            }
-        }
-
-        // Start camera
-        async function startCamera() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
-                });
-                document.getElementById('video').srcObject = stream;
-                console.log('✅ Camera started');
-            } catch (error) {
-                console.error('Camera error:', error);
-                showStatus('❌', 'Camera Error', '', 'Camera access denied. Please allow camera permission.', 'error');
-            }
-        }
-
-        // Detect location
-        function detectLocation() {
-            if (!navigator.geolocation) {
-                updateLocationBar('GPS not supported', false);
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const userLat = position.coords.latitude;
-                    const userLng = position.coords.longitude;
-                    window.userCoords = { lat: userLat, lng: userLng };
-                    updateLocationBar(`📍 Location detected`, true);
-                },
-                (error) => {
-                    console.error('Location error:', error);
-                    updateLocationBar('Location unavailable', false);
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
-
-        // Update location bar
-        function updateLocationBar(text, valid) {
-            const bar = document.getElementById('locationBar');
-            bar.textContent = text;
-            bar.className = 'location-bar ' + (valid ? 'valid' : 'invalid');
-        }
-
-        // Find nearest location offline
-        async function findNearestLocationOffline(userLat, userLng, departmentId) {
-            try {
-                const locations = await OfflineStorage.getPunchLocations();
-                const deptLocations = locations.filter(l => l.department_id === departmentId && l.status === 'active');
-
-                if (deptLocations.length === 0) {
-                    return { success: false, error: 'No locations configured for department' };
-                }
-
-                let nearestLocation = null;
-                let minDistance = Infinity;
-
-                for (const loc of deptLocations) {
-                    const distance = calculateDistance(
-                        userLat, userLng,
-                        parseFloat(loc.latitude), parseFloat(loc.longitude)
-                    );
-
-                    if (distance <= loc.radius && distance < minDistance) {
-                        minDistance = distance;
-                        nearestLocation = { ...loc, distance: Math.round(distance) };
-                    }
-                }
-
-                if (nearestLocation) {
-                    return { success: true, location: nearestLocation };
+                    window.location.href = 'dashboard.html';
                 } else {
-                    return { success: false, error: 'Outside punch area' };
+                    errorMsg.textContent = '❌ ' + result.error;
+                    errorMsg.classList.add('active');
                 }
             } catch (error) {
-                console.error('Offline location check error:', error);
-                return { success: false, error: error.message };
+                errorMsg.textContent = '❌ ' + error.message;
+                errorMsg.classList.add('active');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
             }
         }
 
-        // Calculate distance between coordinates (meters)
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
-        // Verify Labor ID
-        async function verifyLaborId() {
-            const input = document.getElementById('laborIdInput').value.trim().toUpperCase();
-            const errorEl = document.getElementById('idError');
-
-            if (!input) {
-                showIdError('Please enter Labor ID');
-                return;
+        // Enter key submits form
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                handleLogin(e);
             }
-
-            // Find labor
-            const labor = allLaborers.find(l => l.labor_id.toUpperCase() === input);
-
-            if (!labor) {
-                showIdError('Labor ID not found or face not enrolled');
-                return;
-            }
-
-            // Check if labor has face enrolled
-            if (!labor.face_enrolled || !labor.face_descriptor) {
-                showIdError('Face not enrolled. Please contact supervisor.');
-                return;
-            }
-
-            // Check location for labor's department
-            if (window.userCoords) {
-                let locResult;
-                
-                if (isOfflineMode) {
-                    // Offline: check from cached locations
-                    locResult = await findNearestLocationOffline(
-                        window.userCoords.lat,
-                        window.userCoords.lng,
-                        labor.department_id
-                    );
-                } else {
-                    // Online: check from server
-                    locResult = await PunchAPI.findNearestLocation(
-                        window.userCoords.lat,
-                        window.userCoords.lng,
-                        labor.department_id
-                    );
-                }
-
-                if (locResult.success) {
-                    currentLocation = locResult.location;
-                    updateLocationBar(`📍 ${currentLocation.name} (${currentLocation.distance}m)`, true);
-                } else {
-                    updateLocationBar('📍 Outside punch area', false);
-                    showIdError('You are outside the authorized punch area for your department.');
-                    return;
-                }
-            } else {
-                showIdError('Location not detected. Please enable GPS.');
-                return;
-            }
-
-            currentLabor = labor;
-            
-            // Hide input, show punch button
-            document.getElementById('idInputPanel').classList.add('hidden');
-            document.getElementById('punchBtn').style.display = 'block';
-        }
-
-        // Show ID error
-        function showIdError(message) {
-            const errorEl = document.getElementById('idError');
-            errorEl.textContent = message;
-            errorEl.style.display = 'block';
-            setTimeout(() => errorEl.style.display = 'none', 4000);
-        }
-
-        // Process punch
-        async function processPunch() {
-            if (!currentLabor || !currentLocation) {
-                showStatus('❌', 'Error', '', 'Please verify your ID first', 'error');
-                return;
-            }
-
-            if (!modelsLoaded) {
-                showStatus('⏳', 'Please Wait', '', 'AI models still loading...', 'error');
-                return;
-            }
-
-            const punchBtn = document.getElementById('punchBtn');
-            punchBtn.disabled = true;
-
-            showStatus('🔍', 'Verifying', '', 'Analyzing face...', 'info');
-
-            try {
-                // Capture photo
-                const video = document.getElementById('video');
-                const { canvas, blob: photoBlob } = await PhotoUtils.capturePhoto(video, true);
-
-                // Detect face
-                const detection = await faceapi
-                    .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks()
-                    .withFaceDescriptor();
-
-                if (!detection) {
-                    throw new Error('No face detected. Please position your face in the circle.');
-                }
-
-                // Compare with enrolled face
-                const enrolledDescriptor = new Float32Array(currentLabor.face_descriptor);
-                const distance = faceapi.euclideanDistance(enrolledDescriptor, detection.descriptor);
-                const confidence = Math.round((1 - distance) * 100);
-
-                console.log('Face match - Distance:', distance, 'Confidence:', confidence + '%');
-
-                // Check confidence threshold
-                const minConfidence = parseInt(settings.confidence_threshold || '70');
-                const reenrollThreshold = parseInt(settings.reenrollment_threshold || '60');
-
-                if (confidence < minConfidence) {
-                    // Check if needs re-enrollment
-                    if (confidence < reenrollThreshold) {
-                        await LaborAPI.incrementLowConfidence(currentLabor.labor_id);
-                    }
-                    throw new Error(`Face not matched (${confidence}% confidence). Please try again or contact supervisor.`);
-                }
-
-                // Check punch limit (skip if offline)
-                if (!isOfflineMode && navigator.onLine) {
-                    const limitCheck = await PunchAPI.checkPunchLimit(currentLabor.labor_id);
-                    if (!limitCheck.allowed) {
-                        throw new Error(`Punch limit reached (${limitCheck.max} per day)`);
-                    }
-                }
-
-                // Determine punch type
-                showStatus('💾', 'Saving', '', 'Recording punch...', 'info');
-                
-                let punchType;
-                if (isOfflineMode) {
-                    // Offline: determine from local storage
-                    const unsyncedPunches = await OfflineStorage.getUnsyncedPunches();
-                    const todayPunches = unsyncedPunches.filter(p => 
-                        p.laborId === currentLabor.labor_id && p.date === DateUtils.today()
-                    );
-                    const lastPunch = todayPunches[todayPunches.length - 1];
-                    punchType = (!lastPunch || lastPunch.type === 'logout') ? 'login' : 'logout';
-                } else {
-                    punchType = await PunchAPI.getNextPunchType(currentLabor.labor_id);
-                }
-
-                // Save punch record
-                const now = new Date();
-                const punchData = {
-                    laborId: currentLabor.labor_id,
-                    departmentId: currentLabor.department_id,
-                    date: DateUtils.today(),
-                    time: DateUtils.now(),
-                    type: punchType,
-                    locationId: currentLocation.id,
-                    locationName: currentLocation.name,
-                    confidence: confidence,
-                    photoBlob: photoBlob
-                };
-
-                if (isOfflineMode || !navigator.onLine) {
-                    // Save offline
-                    await OfflineStorage.savePunch(punchData);
-                    console.log('[Offline] Punch saved locally');
-                } else {
-                    // Save online
-                    let photoUrl = null;
-                    const uploadResult = await PunchAPI.uploadPhoto(currentLabor.labor_id, photoBlob);
-                    if (uploadResult.success) {
-                        photoUrl = uploadResult.url;
-                    }
-                    punchData.photoUrl = photoUrl;
-                    delete punchData.photoBlob;
-
-                    const saveResult = await PunchAPI.savePunch(punchData);
-                    if (!saveResult.success) {
-                        // Fallback to offline save
-                        punchData.photoBlob = photoBlob;
-                        await OfflineStorage.savePunch(punchData);
-                        console.log('[Fallback] Punch saved offline');
-                    }
-                }
-
-                // Success
-                const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                
-                speak(`${punchType} successful, ${currentLabor.name}`);
-                
-                showStatus(
-                    punchType === 'login' ? '✅' : '👋',
-                    `${punchType.toUpperCase()} Successful`,
-                    timeStr,
-                    `${currentLabor.name}<br>${currentLabor.labor_id}<br>${currentLocation.name}<br>Confidence: ${confidence}%`,
-                    'success'
-                );
-
-                // Reset after 5 seconds
-                setTimeout(() => {
-                    resetTerminal();
-                }, 5000);
-
-            } catch (error) {
-                console.error('Punch error:', error);
-                showStatus('❌', 'Failed', '', error.message, 'error');
-                
-                setTimeout(() => {
-                    document.getElementById('statusOverlay').classList.remove('active');
-                    punchBtn.disabled = false;
-                }, 4000);
-            }
-        }
-
-        // Show status overlay
-        function showStatus(icon, title, time, details, type) {
-            document.getElementById('statusIcon').textContent = icon;
-            document.getElementById('statusTitle').textContent = title;
-            document.getElementById('statusTime').textContent = time;
-            document.getElementById('statusTime').className = 'status-time ' + type;
-            document.getElementById('statusDetails').innerHTML = details;
-            document.getElementById('statusOverlay').classList.add('active');
-        }
-
-        // Speak text
-        function speak(text) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                speechSynthesis.speak(utterance);
-            }
-        }
-
-        // Reset terminal
-        function resetTerminal() {
-            currentLabor = null;
-            currentLocation = null;
-            document.getElementById('laborIdInput').value = '';
-            document.getElementById('idInputPanel').classList.remove('hidden');
-            document.getElementById('punchBtn').style.display = 'none';
-            document.getElementById('punchBtn').disabled = false;
-            document.getElementById('statusOverlay').classList.remove('active');
-            detectLocation();
-        }
-
-        // ============ VIEW MY ATTENDANCE ============
-
-        // Open view attendance
-        async function openViewAttendance() {
-            // Check internet
-            if (!navigator.onLine) {
-                alert('No Internet. Please connect to WiFi to view your attendance.');
-                return;
-            }
-
-            if (!modelsLoaded) {
-                alert('Please wait, system is loading...');
-                return;
-            }
-
-            isViewingAttendance = true;
-            document.getElementById('verifyingOverlay').classList.add('active');
-            document.getElementById('verifyingMessage').textContent = 'Position your face and wait...';
-
-            // Start face detection for attendance
-            setTimeout(() => {
-                detectFaceForAttendance();
-            }, 1000);
-        }
-
-        // Cancel view attendance
-        function cancelViewAttendance() {
-            isViewingAttendance = false;
-            document.getElementById('verifyingOverlay').classList.remove('active');
-        }
-
-        // Detect face for viewing attendance
-        async function detectFaceForAttendance() {
-            if (!isViewingAttendance) return;
-
-            try {
-                document.getElementById('verifyingMessage').textContent = 'Analyzing face...';
-
-                const video = document.getElementById('video');
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0);
-
-                // Detect face
-                const detection = await faceapi
-                    .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks()
-                    .withFaceDescriptor();
-
-                if (!detection) {
-                    document.getElementById('verifyingMessage').textContent = 'No face detected. Please try again...';
-                    setTimeout(() => detectFaceForAttendance(), 1500);
-                    return;
-                }
-
-                // Match against all laborers
-                document.getElementById('verifyingMessage').textContent = 'Matching face...';
-                
-                let bestMatch = null;
-                let bestConfidence = 0;
-                const minConfidence = parseInt(settings.confidence_threshold || '70');
-
-                for (const labor of allLaborers) {
-                    if (!labor.face_descriptor) continue;
-                    
-                    const enrolledDescriptor = new Float32Array(labor.face_descriptor);
-                    const distance = faceapi.euclideanDistance(enrolledDescriptor, detection.descriptor);
-                    const confidence = Math.round((1 - distance) * 100);
-
-                    if (confidence > bestConfidence && confidence >= minConfidence) {
-                        bestConfidence = confidence;
-                        bestMatch = labor;
-                    }
-                }
-
-                if (bestMatch) {
-                    document.getElementById('verifyingMessage').textContent = 'Loading attendance...';
-                    
-                    // Sync first
-                    await SyncManager.syncAll();
-                    
-                    // Load and show attendance
-                    await showAttendance(bestMatch);
-                } else {
-                    document.getElementById('verifyingMessage').textContent = 'Face not recognized. Please try again...';
-                    setTimeout(() => detectFaceForAttendance(), 2000);
-                }
-
-            } catch (error) {
-                console.error('Face detection error:', error);
-                document.getElementById('verifyingMessage').textContent = 'Error. Retrying...';
-                setTimeout(() => detectFaceForAttendance(), 2000);
-            }
-        }
-
-        // Show attendance modal
-        async function showAttendance(labor) {
-            isViewingAttendance = false;
-            document.getElementById('verifyingOverlay').classList.remove('active');
-
-            // Set header info
-            const today = new Date();
-            document.getElementById('attendanceInfo').innerHTML = `
-                <div class="name">${labor.name} (${labor.labor_id})</div>
-                <div class="date">${today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-            `;
-
-            // Fetch today's punches
-            try {
-                const todayStr = DateUtils.today();
-                const { data: punches, error } = await supabaseClient
-                    .from('punch_records')
-                    .select('*')
-                    .eq('labor_id', labor.labor_id)
-                    .eq('date', todayStr)
-                    .order('time', { ascending: true });
-
-                if (error) throw error;
-
-                const listEl = document.getElementById('attendanceList');
-                const summaryEl = document.getElementById('attendanceSummary');
-
-                if (!punches || punches.length === 0) {
-                    listEl.innerHTML = `<div class="no-punches">No punches recorded today</div>`;
-                    summaryEl.innerHTML = `
-                        <div class="summary-hours">0h 0m</div>
-                        <div class="summary-status absent">Absent</div>
-                        <div class="summary-warning">⚠️ You have not punched today</div>
-                    `;
-                } else {
-                    // Render punch list
-                    listEl.innerHTML = punches.map(p => `
-                        <div class="punch-item">
-                            <div class="punch-type ${p.type}">
-                                ${p.type === 'login' ? '🟢' : '🔴'}
-                            </div>
-                            <div class="punch-details">
-                                <div class="type-label ${p.type}">${p.type.toUpperCase()}</div>
-                                <div class="time">${formatTime(p.time)}</div>
-                                <div class="location">📍 ${p.location_name || 'Unknown'}</div>
-                            </div>
-                            ${p.photo_url ? `<img class="punch-photo" src="${p.photo_url}" onclick="openFullscreenPhoto('${p.photo_url}')" alt="Punch Photo">` : ''}
-                        </div>
-                    `).join('');
-
-                    // Calculate hours
-                    const { totalHours, status, warning } = calculateAttendance(punches);
-                    
-                    let statusClass = 'absent';
-                    if (status === 'Present') statusClass = 'present';
-                    else if (status === 'Half Day') statusClass = 'half-day';
-
-                    summaryEl.innerHTML = `
-                        <div class="summary-hours">${totalHours}</div>
-                        <div class="summary-status ${statusClass}">${status}</div>
-                        ${warning ? `<div class="summary-warning">⚠️ ${warning}</div>` : ''}
-                    `;
-                }
-
-                // Show modal
-                document.getElementById('attendanceModal').classList.add('active');
-
-            } catch (error) {
-                console.error('Failed to load attendance:', error);
-                alert('Failed to load attendance. Please try again.');
-            }
-        }
-
-        // Format time
-        function formatTime(timeStr) {
-            if (!timeStr) return '-';
-            const [hours, minutes] = timeStr.split(':');
-            const h = parseInt(hours);
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const h12 = h % 12 || 12;
-            return `${h12}:${minutes} ${ampm}`;
-        }
-
-        // Calculate attendance
-        function calculateAttendance(punches) {
-            let totalMinutes = 0;
-            let loginTime = null;
-
-            for (const punch of punches) {
-                if (punch.type === 'login') {
-                    loginTime = punch.time;
-                } else if (punch.type === 'logout' && loginTime) {
-                    const [lh, lm] = loginTime.split(':').map(Number);
-                    const [oh, om] = punch.time.split(':').map(Number);
-                    const loginMinutes = lh * 60 + lm;
-                    const logoutMinutes = oh * 60 + om;
-                    totalMinutes += (logoutMinutes - loginMinutes);
-                    loginTime = null;
-                }
-            }
-
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            const totalHours = `${hours}h ${minutes}m`;
-
-            const minPresent = parseInt(settings.min_hours_present || '10');
-            const minHalfDay = parseInt(settings.min_hours_half_day || '4');
-
-            let status = 'Absent';
-            let warning = '';
-
-            if (totalMinutes >= minPresent * 60) {
-                status = 'Present';
-            } else if (totalMinutes >= minHalfDay * 60) {
-                status = 'Half Day';
-                warning = `Need ${minPresent} hours for Present`;
-            } else if (totalMinutes > 0) {
-                status = 'Absent';
-                warning = `Need ${minHalfDay} hours for Half Day`;
-            }
-
-            // Check if still logged in
-            const lastPunch = punches[punches.length - 1];
-            if (lastPunch && lastPunch.type === 'login') {
-                warning = 'You are still logged in. Remember to punch out!';
-            }
-
-            return { totalHours, status, warning };
-        }
-
-        // Close attendance modal
-        function closeAttendanceModal() {
-            document.getElementById('attendanceModal').classList.remove('active');
-        }
-
-        // Open fullscreen photo
-        function openFullscreenPhoto(url) {
-            document.getElementById('fullscreenImg').src = url;
-            document.getElementById('fullscreenPhoto').classList.add('active');
-        }
-
-        // Close fullscreen photo
-        function closeFullscreenPhoto() {
-            document.getElementById('fullscreenPhoto').classList.remove('active');
-        }
-
-        // Cleanup
-        window.addEventListener('beforeunload', () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
-        });
-
-        // Internet status
-        window.addEventListener('online', async () => {
-            console.log('[PWA] Online detected');
-            isOfflineMode = false;
-            document.getElementById('noInternet').classList.remove('active');
-            await loadInitialData();
-            await SyncManager.syncAll();
-        });
-
-        window.addEventListener('offline', () => {
-            console.log('[PWA] Offline detected');
-            isOfflineMode = true;
-            // Don't show noInternet - app works offline now!
-            updateLocationBar('📴 Offline Mode - Punches will sync later', true);
         });
     </script>
 </body>
