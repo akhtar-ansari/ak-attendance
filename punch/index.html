@@ -929,27 +929,35 @@
         // ============ VIEW MY ATTENDANCE ============
 
         // Open view attendance
-        async function openViewAttendance() {
-            // Check internet
-            if (!navigator.onLine) {
-                alert('No Internet. Please connect to WiFi to view your attendance.');
-                return;
-            }
+async function openViewAttendance() {
+    // Check internet
+    if (!navigator.onLine) {
+        alert('No Internet. Please connect to WiFi to view your attendance.');
+        return;
+    }
 
-            if (!modelsLoaded) {
-                alert('Please wait, system is loading...');
-                return;
-            }
+    if (!modelsLoaded) {
+        alert('Please wait, system is loading...');
+        return;
+    }
 
-            isViewingAttendance = true;
-            document.getElementById('verifyingOverlay').classList.add('active');
-            document.getElementById('verifyingMessage').textContent = 'Position your face and wait...';
+    // Check if camera is running
+    const video = document.getElementById('video');
+    if (!video.srcObject || !video.srcObject.active) {
+        alert('Camera not ready. Please wait...');
+        await startCamera();
+        return;
+    }
 
-            // Start face detection for attendance
-            setTimeout(() => {
-                detectFaceForAttendance();
-            }, 1000);
-        }
+    isViewingAttendance = true;
+    document.getElementById('verifyingOverlay').classList.add('active');
+    document.getElementById('verifyingMessage').textContent = 'Look at the camera...';
+
+    // Give time for user to position face
+    setTimeout(() => {
+        detectFaceForAttendance();
+    }, 2000);
+}
 
         // Cancel view attendance
         function cancelViewAttendance() {
