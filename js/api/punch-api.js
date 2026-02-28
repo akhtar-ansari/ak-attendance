@@ -223,10 +223,10 @@ const PunchAPI = {
 
                 if (yesterdayPunches && yesterdayPunches.length > 0) {
                     const lastPunch = yesterdayPunches[0];
-                    if (lastPunch.type === 'login') {
-                        // Open login exists from yesterday - this punch belongs to yesterday
-                        punchDate = yesterdayStr;
-                    }
+                    if (lastPunch.type === 'login' && punch.type === 'logout') {
+    // Open login exists from yesterday AND this is logout - belongs to yesterday
+    punchDate = yesterdayStr;
+}
                 }
             }
 
@@ -484,5 +484,6 @@ const PunchAPI = {
     }
 
 };
+
 
 
