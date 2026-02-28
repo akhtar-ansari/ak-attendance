@@ -59,6 +59,12 @@ self.addEventListener('fetch', event => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
+  // Never cache API calls (Supabase)
+  if (event.request.url.includes('supabase.co')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(cachedResponse => {
@@ -122,6 +128,7 @@ self.addEventListener('online', () => {
   self.registration.sync.register('sync-punches');
 
 });
+
 
 
 
