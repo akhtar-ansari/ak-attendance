@@ -65,7 +65,7 @@ const PushNotifications = {
     async getToken() {
         try {
             // Register service worker
-            const registration = await navigator.serviceWorker.register('/ak-attendance/firebase-messaging-sw.js');
+            const registration = await navigator.serviceWorker.register('../firebase-messaging-sw.js', { scope: '/ak-attendance/' });
             console.log('[Push] SW registered:', registration);
 
             // Get token
