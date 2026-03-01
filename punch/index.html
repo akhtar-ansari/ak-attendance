@@ -497,6 +497,13 @@
                 isOfflineMode = false;
                 await loadInitialData();
                 await SyncManager.init();
+                // Listen for foreground notifications
+if (typeof PushNotifications !== 'undefined') {
+    await PushNotifications.init();
+    PushNotifications.onMessage((payload) => {
+        alert('Notification: ' + payload.notification?.title + ' - ' + payload.notification?.body);
+    });
+}
             } else {
                 isOfflineMode = true;
                 await loadOfflineData();
