@@ -109,9 +109,15 @@ const SyncManager = {
                     });
 
                     if (result.success) {
-                        await OfflineStorage.markPunchSynced(punch.id);
-                        console.log(`[SyncManager] Punch ${punch.id} synced`);
-                    }
+    await OfflineStorage.markPunchSynced(punch.id);
+    console.log(`[SyncManager] Punch ${punch.id} synced`);
+    
+    // Update last_sync_at for this laborer
+    await supabaseClient
+        .from('laborers')
+        .update({ last_sync_at: new Date().toISOString() })
+        .eq('labor_id', punch.laborId);
+}
                 } catch (err) {
                     console.error(`[SyncManager] Failed to sync punch ${punch.id}:`, err);
                 }
@@ -202,4 +208,5 @@ const SyncManager = {
             lastSyncTime: lastSync
         };
     }
+
 };
