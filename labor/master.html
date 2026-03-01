@@ -332,25 +332,24 @@ function checkPermissions() {
                         ${syncDate.toLocaleDateString()}
                     </span>`;
                 }
-                return `
                     return `
-    <tr>
-        <td><strong>${labor.labor_id}</strong></td>
-        <td>${labor.name}</td>
-        <td>${labor.iqama_number}</td>
-        <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
-        <td>${labor.nationality}</td>
-        <td>${labor.departments?.name || '-'}</td>
-        <td>
-            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
-                ${labor.status}
-            </span>
-        </td>
-        <td>${faceHtml}</td>
-        <td>${syncHtml}</td>
-        <td>${actions}</td>
-    </tr>
-`;
+                    <tr>
+                        <td><strong>${labor.labor_id}</strong></td>
+                        <td>${labor.name}</td>
+                        <td>${labor.iqama_number}</td>
+                        <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
+                        <td>${labor.nationality}</td>
+                        <td>${labor.departments?.name || '-'}</td>
+                        <td>
+                            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
+                                ${labor.status}
+                            </span>
+                        </td>
+                        <td>${faceHtml}</td>
+                        <td>${syncHtml}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
             }).join('');
         }
 
@@ -513,5 +512,6 @@ function checkPermissions() {
 </body>
 
 </html>
+
 
 
