@@ -872,18 +872,32 @@ async function loadFaceModels() {
                     }
                 }
 
-                // Success
-                const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                
-                speak(`${punchType} successful, ${currentLabor.name}`);
-                
-                showStatus(
-                    punchType === 'login' ? '✅' : '👋',
-                    `${punchType.toUpperCase()} Successful`,
-                    timeStr,
-                    `${currentLabor.name}<br>${currentLabor.labor_id}<br>${currentLocation.name}<br>Confidence: ${confidence}%`,
-                    'success'
-                );
+                /// Success
+const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+if (isOfflineMode || !navigator.onLine) {
+    // Offline - generic message
+    speak(`Punch successful, ${currentLabor.name}`);
+    
+    showStatus(
+        '✅',
+        'Punch Successful',
+        timeStr,
+        `${currentLabor.name}<br>${currentLabor.labor_id}<br>${currentLocation.name}<br>Confidence: ${confidence}%`,
+        'success'
+    );
+} else {
+    // Online - show login/logout
+    speak(`${punchType} successful, ${currentLabor.name}`);
+    
+    showStatus(
+        punchType === 'login' ? '✅' : '👋',
+        `${punchType.toUpperCase()} Successful`,
+        timeStr,
+        `${currentLabor.name}<br>${currentLabor.labor_id}<br>${currentLocation.name}<br>Confidence: ${confidence}%`,
+        'success'
+    );
+}
 
                 // Reset after 5 seconds
                 setTimeout(() => {
