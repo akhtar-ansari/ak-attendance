@@ -70,16 +70,17 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Labor ID</th>
-                            <th>Name</th>
-                            <th>Iqama</th>
-                            <th>Date of Joining</th>
-                            <th>Nationality</th>
-                            <th>Department</th>
-                            <th>Status</th>
-                            <th>Face</th>
-                            <th>Actions</th>
-                        </tr>
+    <th>Labor ID</th>
+    <th>Name</th>
+    <th>Iqama</th>
+    <th>Date of Joining</th>
+    <th>Nationality</th>
+    <th>Department</th>
+    <th>Status</th>
+    <th>Face</th>
+    <th>Last Sync</th>
+    <th>Actions</th>
+</tr>
                     </thead>
                     <tbody id="laborTable">
                         <tr>
@@ -280,7 +281,7 @@ function checkPermissions() {
 
             if (filteredLaborers.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="9" class="text-center p-20 text-muted">
+                    <tr><td colspan="10" class="text-center p-20 text-muted">
                         No laborers found. ${session.role !== 'supervisor' ? 'Click "Add Labor" to create one.' : ''}
                     </td></tr>
                 `;
@@ -313,24 +314,43 @@ function checkPermissions() {
                     actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️</button> `;
                     actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️</button>`;
                 }
-
+// Sync status
+                let syncHtml = '-';
+                if (labor.last_sync_at) {
+                    const syncDate = new Date(labor.last_sync_at);
+                    const now = new Date();
+                    const diffDays = Math.floor((now - syncDate) / (1000 * 60 * 60 * 24));
+                    
+                    let syncColor = 'green';
+                    if (diffDays > 7) {
+                        syncColor = 'red';
+                    } else if (diffDays > 1) {
+                        syncColor = 'orange';
+                    }
+                    
+                    syncHtml = `<span style="color: ${syncColor}; font-weight: bold;">
+                        ${syncDate.toLocaleDateString()}
+                    </span>`;
+                }
                 return `
-                    <tr>
-                        <td><strong>${labor.labor_id}</strong></td>
-                        <td>${labor.name}</td>
-                        <td>${labor.iqama_number}</td>
-                        <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
-                        <td>${labor.nationality}</td>
-                        <td>${labor.departments?.name || '-'}</td>
-                        <td>
-                            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
-                                ${labor.status}
-                            </span>
-                        </td>
-                        <td>${faceHtml}</td>
-                        <td>${actions}</td>
-                    </tr>
-                `;
+                    return `
+    <tr>
+        <td><strong>${labor.labor_id}</strong></td>
+        <td>${labor.name}</td>
+        <td>${labor.iqama_number}</td>
+        <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
+        <td>${labor.nationality}</td>
+        <td>${labor.departments?.name || '-'}</td>
+        <td>
+            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
+                ${labor.status}
+            </span>
+        </td>
+        <td>${faceHtml}</td>
+        <td>${syncHtml}</td>
+        <td>${actions}</td>
+    </tr>
+`;
             }).join('');
         }
 
@@ -493,4 +513,5 @@ function checkPermissions() {
 </body>
 
 </html>
+
 
