@@ -1,3 +1,14 @@
+// Give this SW a scope
+self.addEventListener('install', (event) => {
+    console.log('[Firebase SW] Installing...');
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+    console.log('[Firebase SW] Activated');
+    event.waitUntil(clients.claim());
+});
+
 // Firebase Messaging Service Worker
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
@@ -50,4 +61,5 @@ self.addEventListener('notificationclick', (event) => {
             return clients.openWindow(url);
         })
     );
+
 });
