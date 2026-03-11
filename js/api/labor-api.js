@@ -11,6 +11,7 @@ const LaborAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .order('labor_id');
 
             if (departmentFilter) {
@@ -38,6 +39,7 @@ const LaborAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('status', 'active')
                 .order('labor_id');
 
@@ -64,6 +66,7 @@ const LaborAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .single();
 
@@ -84,6 +87,7 @@ const LaborAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('iqama_number', iqamaNumber)
                 .single();
 
@@ -101,6 +105,7 @@ const LaborAPI = {
             const { count, error } = await supabaseClient
                 .from('laborers')
                 .select('*', { count: 'exact', head: true })
+                .eq('client_id', AUTH.getClientId())
                 .eq('iqama_number', iqamaNumber);
 
             if (error) throw error;
@@ -155,7 +160,8 @@ const LaborAPI = {
                     status: laborer.status || 'active',
                     face_enrolled: false,
                     needs_reenrollment: false,
-                    low_confidence_count: 0
+                    low_confidence_count: 0,
+                    client_id: AUTH.getClientId()
                 })
                 .select(`
                     *,
@@ -182,6 +188,7 @@ const LaborAPI = {
             const { data: oldData } = await supabaseClient
                 .from('laborers')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .single();
 
@@ -201,6 +208,7 @@ const LaborAPI = {
             const { data, error } = await supabaseClient
                 .from('laborers')
                 .update(updateObj)
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .select(`
                     *,
@@ -227,6 +235,7 @@ const LaborAPI = {
             const { data: oldData } = await supabaseClient
                 .from('laborers')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .single();
 
@@ -234,6 +243,7 @@ const LaborAPI = {
                 const { error } = await supabaseClient
                     .from('laborers')
                     .delete()
+                    .eq('client_id', AUTH.getClientId())
                     .eq('labor_id', laborId);
 
                 if (error) throw error;
@@ -241,6 +251,7 @@ const LaborAPI = {
                 const { error } = await supabaseClient
                     .from('laborers')
                     .update({ status: 'inactive' })
+                    .eq('client_id', AUTH.getClientId())
                     .eq('labor_id', laborId);
 
                 if (error) throw error;
@@ -287,6 +298,7 @@ const LaborAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('needs_reenrollment', true)
                 .eq('status', 'active');
 
@@ -316,6 +328,7 @@ const LaborAPI = {
                     needs_reenrollment: false,
                     low_confidence_count: 0
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .select()
                 .single();
@@ -338,6 +351,7 @@ const LaborAPI = {
             const { data: laborer } = await supabaseClient
                 .from('laborers')
                 .select('low_confidence_count, last_low_confidence_date')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .single();
 
@@ -363,6 +377,7 @@ const LaborAPI = {
                     last_low_confidence_date: today,
                     needs_reenrollment: needsReenrollment
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId);
 
             if (error) throw error;

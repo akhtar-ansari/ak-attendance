@@ -19,6 +19,7 @@ const UserAPI = {
                     created_at,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -43,6 +44,7 @@ const UserAPI = {
                     status,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
@@ -65,6 +67,7 @@ const UserAPI = {
             const { data: existing } = await supabaseClient
                 .from('users')
                 .select('id')
+                .eq('client_id', AUTH.getClientId())
                 .eq('username', user.username.toLowerCase().trim())
                 .single();
 
@@ -85,7 +88,8 @@ const UserAPI = {
                     name: user.name.trim(),
                     role: user.role,
                     department_id: user.role === 'super_admin' ? null : user.departmentId,
-                    status: user.status || 'active'
+                    status: user.status || 'active',
+                    client_id: AUTH.getClientId()
                 })
                 .select(`
                     id,
@@ -119,6 +123,7 @@ const UserAPI = {
             const { data: oldData } = await supabaseClient
                 .from('users')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
@@ -134,6 +139,7 @@ const UserAPI = {
             const { data, error } = await supabaseClient
                 .from('users')
                 .update(updateObj)
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .select(`
                     id,
@@ -176,12 +182,14 @@ const UserAPI = {
             const { data: oldData } = await supabaseClient
                 .from('users')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
             const { error } = await supabaseClient
                 .from('users')
                 .update({ status: 'inactive' })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id);
 
             if (error) throw error;
@@ -204,6 +212,7 @@ const UserAPI = {
             const { data: user } = await supabaseClient
                 .from('users')
                 .select('password_hash')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', session.userId)
                 .single();
 
@@ -214,6 +223,7 @@ const UserAPI = {
             const { error } = await supabaseClient
                 .from('users')
                 .update({ password_hash: newPassword })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', session.userId);
 
             if (error) throw error;

@@ -1,4 +1,4 @@
-# AK Attendance System v2.0
+# AK Attendance System v2.1
 
 Biometric attendance system for warehouse operations with face recognition and geo-fencing.
 

@@ -6,6 +6,7 @@ const DepartmentAPI = {
             const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .order('name');
 
             if (error) throw error;
@@ -22,6 +23,7 @@ const DepartmentAPI = {
             const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('status', 'active')
                 .order('name');
 
@@ -39,6 +41,7 @@ const DepartmentAPI = {
             const { data, error } = await supabaseClient
                 .from('departments')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
@@ -58,7 +61,8 @@ const DepartmentAPI = {
                 .insert({
                     name: department.name.trim(),
                     code: department.code.toUpperCase().trim(),
-                    status: department.status || 'active'
+                    status: department.status || 'active',
+                    client_id: AUTH.getClientId()
                 })
                 .select()
                 .single();
@@ -82,6 +86,7 @@ const DepartmentAPI = {
             const { data: oldData } = await supabaseClient
                 .from('departments')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
@@ -92,6 +97,7 @@ const DepartmentAPI = {
                     code: updates.code?.toUpperCase().trim(),
                     status: updates.status
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .select()
                 .single();
@@ -115,6 +121,7 @@ const DepartmentAPI = {
             const { count: laborerCount } = await supabaseClient
                 .from('laborers')
                 .select('*', { count: 'exact', head: true })
+                .eq('client_id', AUTH.getClientId())
                 .eq('department_id', id);
 
             if (laborerCount > 0) {
@@ -125,6 +132,7 @@ const DepartmentAPI = {
             const { count: userCount } = await supabaseClient
                 .from('users')
                 .select('*', { count: 'exact', head: true })
+                .eq('client_id', AUTH.getClientId())
                 .eq('department_id', id);
 
             if (userCount > 0) {
@@ -135,12 +143,14 @@ const DepartmentAPI = {
             const { data: oldData } = await supabaseClient
                 .from('departments')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
             const { error } = await supabaseClient
                 .from('departments')
                 .delete()
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id);
 
             if (error) throw error;

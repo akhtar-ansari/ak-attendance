@@ -18,6 +18,7 @@ const ReportAPI = {
                         department_id
                     )
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .gte('date', fromDate)
                 .lte('date', toDate)
                 .order('date', { ascending: false });
@@ -42,6 +43,7 @@ const ReportAPI = {
             const { data, error } = await supabaseClient
                 .from('daily_attendance')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .gte('date', fromDate)
                 .lte('date', toDate)
@@ -61,6 +63,7 @@ const ReportAPI = {
             const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('id, time, type, photo_url, confidence, location_name')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', date)
                 .order('time');
@@ -87,6 +90,7 @@ const ReportAPI = {
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, iqama_number, name, date_of_joining, department_id')
+                .eq('client_id', AUTH.getClientId())
                 .order('labor_id');
 
             if (departmentFilter) {
@@ -100,6 +104,7 @@ const ReportAPI = {
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status')
+                .eq('client_id', AUTH.getClientId())
                 .gte('date', startDate)
                 .lte('date', endDate);
 
@@ -215,7 +220,8 @@ const ReportAPI = {
             // Get laborer counts
             let laborQuery = supabaseClient
                 .from('laborers')
-                .select('status, face_enrolled', { count: 'exact' });
+                .select('status, face_enrolled', { count: 'exact' })
+                .eq('client_id', AUTH.getClientId());
 
             if (departmentFilter) {
                 laborQuery = laborQuery.eq('department_id', departmentFilter);
@@ -231,6 +237,7 @@ const ReportAPI = {
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('final_status')
+                .eq('client_id', AUTH.getClientId())
                 .eq('date', today);
 
             if (departmentFilter) {
@@ -247,6 +254,7 @@ const ReportAPI = {
             let punchQuery = supabaseClient
                 .from('punch_records')
                 .select('type')
+                .eq('client_id', AUTH.getClientId())
                 .eq('date', today);
 
             if (departmentFilter) {
@@ -262,6 +270,7 @@ const ReportAPI = {
             let lopQuery = supabaseClient
                 .from('lop_requests')
                 .select('id', { count: 'exact', head: true })
+                .eq('client_id', AUTH.getClientId())
                 .eq('approval_status', 'pending');
 
             if (departmentFilter) {
@@ -292,4 +301,3 @@ const ReportAPI = {
     }
 
 };
-

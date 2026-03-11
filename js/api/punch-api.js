@@ -13,6 +13,7 @@ const PunchAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .order('name');
 
             if (departmentFilter) {
@@ -40,6 +41,7 @@ const PunchAPI = {
                     *,
                     departments:department_id (id, name, code)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('status', 'active')
                 .order('name');
 
@@ -63,6 +65,7 @@ const PunchAPI = {
             const { data, error } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('department_id', departmentId)
                 .eq('status', 'active')
                 .order('name');
@@ -86,7 +89,8 @@ const PunchAPI = {
                     latitude: location.latitude,
                     longitude: location.longitude,
                     radius: location.radius || 100,
-                    status: location.status || 'active'
+                    status: location.status || 'active',
+                    client_id: AUTH.getClientId()
                 })
                 .select(`
                     *,
@@ -111,6 +115,7 @@ const PunchAPI = {
             const { data: oldData } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
@@ -124,6 +129,7 @@ const PunchAPI = {
                     radius: updates.radius,
                     status: updates.status
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .select(`
                     *,
@@ -148,12 +154,14 @@ const PunchAPI = {
             const { data: oldData } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .single();
 
             const { error } = await supabaseClient
                 .from('punch_locations')
                 .delete()
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id);
 
             if (error) throw error;
@@ -217,6 +225,7 @@ const PunchAPI = {
                 const { data: yesterdayPunches } = await supabaseClient
                     .from('punch_records')
                     .select('type')
+                    .eq('client_id', AUTH.getClientId())
                     .eq('labor_id', punch.laborId)
                     .eq('date', yesterdayStr)
                     .order('time', { ascending: false });
@@ -224,9 +233,9 @@ const PunchAPI = {
                 if (yesterdayPunches && yesterdayPunches.length > 0) {
                     const lastPunch = yesterdayPunches[0];
                     if (lastPunch.type === 'login' && punch.type === 'logout') {
-    // Open login exists from yesterday AND this is logout - belongs to yesterday
-    punchDate = yesterdayStr;
-}
+                        // Open login exists from yesterday AND this is logout - belongs to yesterday
+                        punchDate = yesterdayStr;
+                    }
                 }
             }
 
@@ -241,7 +250,8 @@ const PunchAPI = {
                     location_id: punch.locationId,
                     location_name: punch.locationName,
                     confidence: punch.confidence,
-                    photo_url: punch.photoUrl
+                    photo_url: punch.photoUrl,
+                    client_id: AUTH.getClientId()
                 })
                 .select()
                 .single();
@@ -278,6 +288,7 @@ const PunchAPI = {
             const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', today)
                 .order('time');
@@ -298,6 +309,7 @@ const PunchAPI = {
             let query = supabaseClient
                 .from('punch_records')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .gte('date', fromDate)
                 .lte('date', toDate)
                 .order('date', { ascending: false })
@@ -329,6 +341,7 @@ const PunchAPI = {
             const { data, error } = await supabaseClient
                 .from('punch_records')
                 .select('type')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', today)
                 .order('time', { ascending: false })
@@ -356,6 +369,7 @@ const PunchAPI = {
             const { data: settings } = await supabaseClient
                 .from('settings')
                 .select('value')
+                .eq('client_id', AUTH.getClientId())
                 .eq('key', 'max_punches_per_day')
                 .single();
 
@@ -365,6 +379,7 @@ const PunchAPI = {
             const { count, error } = await supabaseClient
                 .from('punch_records')
                 .select('*', { count: 'exact', head: true })
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', today);
 
@@ -400,6 +415,7 @@ const PunchAPI = {
             const { data: locations, error } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('department_id', departmentId)
                 .eq('status', 'active');
 
@@ -442,6 +458,7 @@ const PunchAPI = {
             const { data: settings } = await supabaseClient
                 .from('settings')
                 .select('value')
+                .eq('client_id', AUTH.getClientId())
                 .eq('key', 'photo_retention_days')
                 .single();
 
@@ -454,6 +471,7 @@ const PunchAPI = {
             const { data: oldPunches } = await supabaseClient
                 .from('punch_records')
                 .select('id, photo_url')
+                .eq('client_id', AUTH.getClientId())
                 .lt('date', cutoffStr)
                 .not('photo_url', 'is', null);
 
@@ -472,6 +490,7 @@ const PunchAPI = {
                     await supabaseClient
                         .from('punch_records')
                         .update({ photo_url: null })
+                        .eq('client_id', AUTH.getClientId())
                         .eq('id', punch.id);
                 }
             }
@@ -484,6 +503,3 @@ const PunchAPI = {
     }
 
 };
-
-
-

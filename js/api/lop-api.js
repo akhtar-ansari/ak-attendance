@@ -13,6 +13,7 @@ const LOPAPI = {
                     requester:requested_by (name),
                     approver:approved_by (name)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .order('created_at', { ascending: false });
 
             if (departmentFilter) {
@@ -48,6 +49,7 @@ const LOPAPI = {
                     requester:requested_by (name),
                     approver:approved_by (name)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .order('date', { ascending: false });
 
@@ -68,6 +70,7 @@ const LOPAPI = {
             const { data: existing } = await supabaseClient
                 .from('lop_requests')
                 .select('id')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', request.laborId)
                 .eq('date', request.date)
                 .single();
@@ -86,7 +89,8 @@ const LOPAPI = {
                     requested_status: request.requestedStatus,
                     remarks: request.remarks,
                     requested_by: session.userId,
-                    approval_status: 'pending'
+                    approval_status: 'pending',
+                    client_id: AUTH.getClientId()
                 })
                 .select()
                 .single();
@@ -111,6 +115,7 @@ const LOPAPI = {
             const { data: current } = await supabaseClient
                 .from('lop_requests')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', requestId)
                 .single();
 
@@ -128,6 +133,7 @@ const LOPAPI = {
                     approved_by: session.userId,
                     approved_at: new Date().toISOString()
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', requestId)
                 .select()
                 .single();
@@ -141,6 +147,7 @@ const LOPAPI = {
                     final_status: finalStatus,
                     lop_request_id: requestId
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', current.labor_id)
                 .eq('date', current.date);
 
@@ -161,6 +168,7 @@ const LOPAPI = {
             const { data: current } = await supabaseClient
                 .from('lop_requests')
                 .select('*')
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', requestId)
                 .single();
 
@@ -172,6 +180,7 @@ const LOPAPI = {
                     approved_by: session.userId,
                     approved_at: new Date().toISOString()
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', requestId)
                 .select()
                 .single();
@@ -230,6 +239,7 @@ const LOPAPI = {
             let query = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, department_id, date, auto_status')
+                .eq('client_id', AUTH.getClientId())
                 .eq('date', date)
                 .in('auto_status', ['H', 'A']);
 
@@ -247,6 +257,7 @@ const LOPAPI = {
                 const { data: existing } = await supabaseClient
                     .from('lop_requests')
                     .select('id')
+                    .eq('client_id', AUTH.getClientId())
                     .eq('labor_id', record.labor_id)
                     .eq('date', record.date)
                     .single();
@@ -261,7 +272,8 @@ const LOPAPI = {
                             auto_status: record.auto_status,
                             requested_status: record.auto_status === 'H' ? 'P' : 'H',
                             remarks: 'Auto-generated',
-                            approval_status: 'pending'
+                            approval_status: 'pending',
+                            client_id: AUTH.getClientId()
                         });
                     created++;
                 }
@@ -272,8 +284,7 @@ const LOPAPI = {
             console.error('Auto-create LOP error:', error);
             return { success: false, error: error.message };
         }
-    }
-,
+    },
 
     // Auto-create draft LOP for hours < 10 (but has punch)
     async autoCreateDraft(laborId, date, departmentId) {
@@ -282,6 +293,7 @@ const LOPAPI = {
             const { data: attendance } = await supabaseClient
                 .from('daily_attendance')
                 .select('auto_status, total_hours')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', date)
                 .single();
@@ -297,6 +309,7 @@ const LOPAPI = {
             const { data: existing } = await supabaseClient
                 .from('lop_requests')
                 .select('id')
+                .eq('client_id', AUTH.getClientId())
                 .eq('labor_id', laborId)
                 .eq('date', date)
                 .single();
@@ -315,7 +328,8 @@ const LOPAPI = {
                     auto_status: attendance.auto_status,
                     requested_status: requestedStatus,
                     approval_status: 'draft',
-                    remarks: `Auto-suggested: Worked ${hours.toFixed(1)} hours`
+                    remarks: `Auto-suggested: Worked ${hours.toFixed(1)} hours`,
+                    client_id: AUTH.getClientId()
                 })
                 .select()
                 .single();
@@ -340,6 +354,7 @@ const LOPAPI = {
                     laborers:labor_id (name),
                     requester:requested_by (name)
                 `)
+                .eq('client_id', AUTH.getClientId())
                 .eq('approval_status', 'draft')
                 .order('date', { ascending: false });
 
@@ -369,6 +384,7 @@ const LOPAPI = {
                     requested_by: session.userId,
                     updated_at: new Date().toISOString()
                 })
+                .eq('client_id', AUTH.getClientId())
                 .eq('id', id)
                 .eq('approval_status', 'draft')
                 .select()
@@ -400,4 +416,3 @@ const LOPAPI = {
         return results;
     }
 };
-
