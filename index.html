@@ -114,44 +114,51 @@
         }
 
         async function handleLogin(event) {
-            event.preventDefault();
-
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            const loginBtn = document.getElementById('loginBtn');
-            const errorMsg = document.getElementById('errorMsg');
-
-            // Clear previous error
-            errorMsg.classList.remove('active');
-
-            // Disable button
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Logging in...';
-
-            try {
-                // Test connection first
-                const connected = await testConnection();
-                if (!connected) {
-                    throw new Error('Cannot connect to server. Check internet connection.');
-                }
-
-                // Attempt login
-                const result = await AUTH.login(username, password);
-
-                if (result.success) {
-                    window.location.href = 'dashboard.html';
-                } else {
-                    errorMsg.textContent = '❌ ' + result.error;
-                    errorMsg.classList.add('active');
-                }
-            } catch (error) {
-                errorMsg.textContent = '❌ ' + error.message;
-                errorMsg.classList.add('active');
-            } finally {
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Login';
-            }
+    event.preventDefault();
+    const clientCode = document.getElementById('clientCode').value.trim();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const loginBtn = document.getElementById('loginBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    
+    // Validate client code
+    if (!clientCode) {
+        errorMsg.textContent = '❌ Please enter client code';
+        errorMsg.classList.add('active');
+        return;
+    }
+    
+    // Clear previous error
+    errorMsg.classList.remove('active');
+    
+    // Disable button
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Logging in...';
+    
+    try {
+        // Test connection first
+        const connected = await testConnection();
+        if (!connected) {
+            throw new Error('Cannot connect to server. Check internet connection.');
         }
+        
+        // Attempt login with client code
+        const result = await AUTH.login(clientCode, username, password);
+        
+        if (result.success) {
+            window.location.href = 'dashboard.html';
+        } else {
+            errorMsg.textContent = '❌ ' + result.error;
+            errorMsg.classList.add('active');
+        }
+    } catch (error) {
+        errorMsg.textContent = '❌ ' + error.message;
+        errorMsg.classList.add('active');
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Login';
+    }
+}
 
         // Enter key submits form
         document.getElementById('password').addEventListener('keypress', function(e) {
