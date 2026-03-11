@@ -7,131 +7,114 @@ const AUTH = {
     // Default AK Client ID (for backward compatibility)
     AK_CLIENT_ID: '00000000-0000-0000-0000-000000000001',
 
-// Login user with client code
-async login(clientCode, username, password) {
-    try {
-        // First, find the client by code
-        const { data: clientData, error: clientError } = await supabaseClient
-            .from('clients')
-            .select('id, business_name, business_name_ar, logo_url, subscription_status, subscription_tier, subscription_end_date, is_active')
-            .eq('client_code', clientCode.toUpperCase().trim())
-            .single();
+    // Login user with client code
+    async login(clientCode, username, password) {
+        try {
+            // First, find the client by code
+            const { data: clientData, error: clientError } = await supabaseClient
+                .from('clients')
+                .select('id, business_name, business_name_ar, logo_url, subscription_status, subscription_tier, subscription_end_date, is_active')
+                .eq('client_code', clientCode.toUpperCase().trim())
+                .single();
 
-        if (clientError || !clientData) {
-            return { success: false, error: 'Invalid client code' };
+            if (clientError || !clientData) {
+                return { success: false, error: 'Invalid client code' };
+            }
+
+            if (!clientData.is_active) {
+                return { success: false, error: 'This account has been deactivated. Contact support.' };
+            }
+
+            // Now find user belonging to this client
+            const { data: userData, error: userError } = await supabaseClient
+                .from('users')
+                .select('id, username, password_hash, name, role, department_id, status, client_id')
+                .eq('username', username.toLowerCase().trim())
+                .eq('client_id', clientData.id)
+                .eq('status', 'active')
+                .single();
+
+            if (userError || !userData) {
+                return { success: false, error: 'User not found for this client' };
+            }
+
+            if (userData.password_hash !== password) {
+                return { success: false, error: 'Invalid password' };
+            }
+
+            // Check subscription status
+            const subscriptionCheck = this.checkSubscriptionStatus(clientData);
+            if (!subscriptionCheck.valid) {
+                return { success: false, error: subscriptionCheck.message };
+            }
+
+            // Create session with client info
+            const session = {
+                userId: userData.id,
+                username: userData.username,
+                name: userData.name,
+                role: userData.role,
+                departmentId: userData.department_id,
+                clientId: clientData.id,
+                clientCode: clientCode.toUpperCase().trim(),
+                clientName: clientData.business_name,
+                clientNameAr: clientData.business_name_ar,
+                clientLogo: clientData.logo_url,
+                clientTier: clientData.subscription_tier,
+                clientStatus: clientData.subscription_status,
+                loginTime: new Date().toISOString()
+            };
+
+            localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+            
+            // Store client info separately for easy access
+            localStorage.setItem('client_id', clientData.id);
+            localStorage.setItem('client_code', clientCode.toUpperCase().trim());
+            localStorage.setItem('client_name', clientData.business_name);
+            if (clientData.logo_url) {
+                localStorage.setItem('client_logo', clientData.logo_url);
+            }
+
+            // Audit log
+            await this.logAction('LOGIN', 'users', userData.id, null, { 
+                username: userData.username,
+                client_id: clientData.id,
+                client_code: clientCode
+            });
+
+            return { success: true, user: session };
+        } catch (error) {
+            console.error('Login error:', error);
+            return { success: false, error: 'Login failed. Check internet connection.' };
         }
-
-        if (!clientData.is_active) {
-            return { success: false, error: 'This account has been deactivated. Contact support.' };
-        }
-
-        // Now find user belonging to this client
-        const { data: userData, error: userError } = await supabaseClient
-            .from('users')
-            .select('id, username, password_hash, name, role, department_id, status, client_id')
-            .eq('username', username.toLowerCase().trim())
-            .eq('client_id', clientData.id)
-            .eq('status', 'active')
-            .single();
-
-        if (userError || !userData) {
-            return { success: false, error: 'User not found for this client' };
-        }
-
-        if (userData.password_hash !== password) {
-            return { success: false, error: 'Invalid password' };
-        }
-
-        // Check subscription status
-        const subscriptionCheck = this.checkSubscriptionStatus(clientData);
-        if (!subscriptionCheck.valid) {
-            return { success: false, error: subscriptionCheck.message };
-        }
-
-        // Create session with client info
-        const session = {
-            userId: userData.id,
-            username: userData.username,
-            name: userData.name,
-            role: userData.role,
-            departmentId: userData.department_id,
-            clientId: clientData.id,
-            clientCode: clientCode.toUpperCase().trim(),
-            clientName: clientData.business_name,
-            clientNameAr: clientData.business_name_ar,
-            clientLogo: clientData.logo_url,
-            clientTier: clientData.subscription_tier,
-            clientStatus: clientData.subscription_status,
-            loginTime: new Date().toISOString()
-        };
-
-        localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
-        
-        // Store client info separately for easy access
-        localStorage.setItem('client_id', clientData.id);
-        localStorage.setItem('client_code', clientCode.toUpperCase().trim());
-        localStorage.setItem('client_name', clientData.business_name);
-        if (clientData.logo_url) {
-            localStorage.setItem('client_logo', clientData.logo_url);
-        }
-
-        // Audit log
-        await this.logAction('LOGIN', 'users', userData.id, null, { 
-            username: userData.username,
-            client_id: clientData.id,
-            client_code: clientCode
-        });
-
-        return { success: true, user: session };
-    } catch (error) {
-        console.error('Login error:', error);
-        return { success: false, error: 'Login failed. Check internet connection.' };
-    }
-},
+    },
 
     // Check subscription status
-checkSubscriptionStatus(clientData) {
-    const now = new Date();
-    
-    // Premium clients have no expiry check
-    if (clientData.subscription_status === 'premium') {
-        return { valid: true };
-    }
-    
-    // Check if expired
-    if (clientData.subscription_status === 'expired') {
-        return { 
-            valid: false, 
-            message: 'Your subscription has expired. Contact Arwa Enterprises: +91 7021229209' 
-        };
-    }
-    
-    // Check end date
-    if (clientData.subscription_end_date) {
-        const endDate = new Date(clientData.subscription_end_date);
-        if (now > endDate) {
+    checkSubscriptionStatus(clientData) {
+        const now = new Date();
+        
+        // Premium clients have no expiry check
+        if (clientData.subscription_status === 'premium') {
+            return { valid: true };
+        }
+        
+        // Check if expired
+        if (clientData.subscription_status === 'expired') {
             return { 
                 valid: false, 
                 message: 'Your subscription has expired. Contact Arwa Enterprises: +91 7021229209' 
             };
         }
-    }
-    
-    return { valid: true };
-},
         
-        // Paid subscription check
-        if (clientData.plan === 'paid' || clientData.plan === 'basic' || clientData.plan === 'standard') {
-            if (clientData.subscription_ends_at) {
-                const subEnd = new Date(clientData.subscription_ends_at);
-                if (now > subEnd) {
-                    return { 
-                        valid: false, 
-                        message: 'Your subscription has expired. Please renew to continue using the service.' 
-                    };
-                }
+        // Check end date
+        if (clientData.subscription_end_date) {
+            const endDate = new Date(clientData.subscription_end_date);
+            if (now > endDate) {
+                return { 
+                    valid: false, 
+                    message: 'Your subscription has expired. Contact Arwa Enterprises: +91 7021229209' 
+                };
             }
-            return { valid: true };
         }
         
         return { valid: true };
@@ -150,6 +133,7 @@ checkSubscriptionStatus(clientData) {
         // Clear all session data
         localStorage.removeItem(this.SESSION_KEY);
         localStorage.removeItem('client_id');
+        localStorage.removeItem('client_code');
         localStorage.removeItem('client_name');
         localStorage.removeItem('client_logo');
         
@@ -178,10 +162,10 @@ checkSubscriptionStatus(clientData) {
         const session = this.getSession();
         return {
             id: session?.clientId || localStorage.getItem('client_id') || this.AK_CLIENT_ID,
-            name: session?.clientName || localStorage.getItem('client_name') || 'M.A. Al Abdul Karim & Co',
+            name: session?.clientName || localStorage.getItem('client_name') || 'Company',
             nameAr: session?.clientNameAr || null,
             logo: session?.clientLogo || localStorage.getItem('client_logo') || null,
-            plan: session?.clientPlan || 'premium'
+            plan: session?.clientTier || 'basic'
         };
     },
 
@@ -292,7 +276,7 @@ checkSubscriptionStatus(clientData) {
         }
         
         // Update page title
-        document.title = document.title.replace('AK Attendance', clientInfo.name + ' - Attendance');
+        document.title = document.title.replace('Attendance', clientInfo.name + ' - Attendance');
     }
 };
 
