@@ -7,106 +7,118 @@ const AUTH = {
     // Default AK Client ID (for backward compatibility)
     AK_CLIENT_ID: '00000000-0000-0000-0000-000000000001',
 
-    // Login user
-    async login(username, password) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('id, username, password_hash, name, role, department_id, status, client_id')
-                .eq('username', username.toLowerCase().trim())
-                .eq('status', 'active')
-                .single();
+// Login user with client code
+async login(clientCode, username, password) {
+    try {
+        // First, find the client by code
+        const { data: clientData, error: clientError } = await supabaseClient
+            .from('clients')
+            .select('id, business_name, business_name_ar, logo_url, subscription_status, subscription_tier, subscription_end_date, is_active')
+            .eq('client_code', clientCode.toUpperCase().trim())
+            .single();
 
-            if (error || !data) {
-                return { success: false, error: 'User not found' };
-            }
-
-            if (data.password_hash !== password) {
-                return { success: false, error: 'Invalid password' };
-            }
-
-            // Get client info
-            const clientId = data.client_id || this.AK_CLIENT_ID;
-            const { data: clientData, error: clientError } = await supabaseClient
-                .from('clients')
-                .select('id, business_name, business_name_ar, logo_url, plan, trial_ends_at, subscription_ends_at, is_active')
-                .eq('id', clientId)
-                .single();
-
-            // Check if client is active
-            if (clientError || !clientData) {
-                return { success: false, error: 'Client account not found' };
-            }
-
-            if (!clientData.is_active) {
-                return { success: false, error: 'Your account has been deactivated. Please contact support.' };
-            }
-
-            // Check trial/subscription status
-            const subscriptionCheck = this.checkSubscriptionStatus(clientData);
-            if (!subscriptionCheck.valid) {
-                return { success: false, error: subscriptionCheck.message };
-            }
-
-            // Create session with client info
-            const session = {
-                userId: data.id,
-                username: data.username,
-                name: data.name,
-                role: data.role,
-                departmentId: data.department_id,
-                clientId: clientId,
-                clientName: clientData.business_name,
-                clientNameAr: clientData.business_name_ar,
-                clientLogo: clientData.logo_url,
-                clientPlan: clientData.plan,
-                loginTime: new Date().toISOString()
-            };
-
-            localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
-            
-            // Also store client info separately for easy access
-            localStorage.setItem('client_id', clientId);
-            localStorage.setItem('client_name', clientData.business_name);
-            if (clientData.logo_url) {
-                localStorage.setItem('client_logo', clientData.logo_url);
-            }
-
-            // Audit log
-            await this.logAction('LOGIN', 'users', data.id, null, { 
-                username: data.username,
-                client_id: clientId 
-            });
-
-            return { success: true, user: session };
-        } catch (error) {
-            console.error('Login error:', error);
-            return { success: false, error: 'Login failed. Check internet connection.' };
+        if (clientError || !clientData) {
+            return { success: false, error: 'Invalid client code' };
         }
-    },
+
+        if (!clientData.is_active) {
+            return { success: false, error: 'This account has been deactivated. Contact support.' };
+        }
+
+        // Now find user belonging to this client
+        const { data: userData, error: userError } = await supabaseClient
+            .from('users')
+            .select('id, username, password_hash, name, role, department_id, status, client_id')
+            .eq('username', username.toLowerCase().trim())
+            .eq('client_id', clientData.id)
+            .eq('status', 'active')
+            .single();
+
+        if (userError || !userData) {
+            return { success: false, error: 'User not found for this client' };
+        }
+
+        if (userData.password_hash !== password) {
+            return { success: false, error: 'Invalid password' };
+        }
+
+        // Check subscription status
+        const subscriptionCheck = this.checkSubscriptionStatus(clientData);
+        if (!subscriptionCheck.valid) {
+            return { success: false, error: subscriptionCheck.message };
+        }
+
+        // Create session with client info
+        const session = {
+            userId: userData.id,
+            username: userData.username,
+            name: userData.name,
+            role: userData.role,
+            departmentId: userData.department_id,
+            clientId: clientData.id,
+            clientCode: clientCode.toUpperCase().trim(),
+            clientName: clientData.business_name,
+            clientNameAr: clientData.business_name_ar,
+            clientLogo: clientData.logo_url,
+            clientTier: clientData.subscription_tier,
+            clientStatus: clientData.subscription_status,
+            loginTime: new Date().toISOString()
+        };
+
+        localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+        
+        // Store client info separately for easy access
+        localStorage.setItem('client_id', clientData.id);
+        localStorage.setItem('client_code', clientCode.toUpperCase().trim());
+        localStorage.setItem('client_name', clientData.business_name);
+        if (clientData.logo_url) {
+            localStorage.setItem('client_logo', clientData.logo_url);
+        }
+
+        // Audit log
+        await this.logAction('LOGIN', 'users', userData.id, null, { 
+            username: userData.username,
+            client_id: clientData.id,
+            client_code: clientCode
+        });
+
+        return { success: true, user: session };
+    } catch (error) {
+        console.error('Login error:', error);
+        return { success: false, error: 'Login failed. Check internet connection.' };
+    }
+},
 
     // Check subscription status
-    checkSubscriptionStatus(clientData) {
-        const now = new Date();
-        
-        // Premium clients (like AK) have no expiry check
-        if (clientData.plan === 'premium') {
-            return { valid: true };
+checkSubscriptionStatus(clientData) {
+    const now = new Date();
+    
+    // Premium clients have no expiry check
+    if (clientData.subscription_status === 'premium') {
+        return { valid: true };
+    }
+    
+    // Check if expired
+    if (clientData.subscription_status === 'expired') {
+        return { 
+            valid: false, 
+            message: 'Your subscription has expired. Contact Arwa Enterprises: +91 7021229209' 
+        };
+    }
+    
+    // Check end date
+    if (clientData.subscription_end_date) {
+        const endDate = new Date(clientData.subscription_end_date);
+        if (now > endDate) {
+            return { 
+                valid: false, 
+                message: 'Your subscription has expired. Contact Arwa Enterprises: +91 7021229209' 
+            };
         }
-        
-        // Trial check
-        if (clientData.plan === 'trial') {
-            if (clientData.trial_ends_at) {
-                const trialEnd = new Date(clientData.trial_ends_at);
-                if (now > trialEnd) {
-                    return { 
-                        valid: false, 
-                        message: 'Your trial has expired. Please subscribe to continue using the service.' 
-                    };
-                }
-            }
-            return { valid: true };
-        }
+    }
+    
+    return { valid: true };
+},
         
         // Paid subscription check
         if (clientData.plan === 'paid' || clientData.plan === 'basic' || clientData.plan === 'standard') {
