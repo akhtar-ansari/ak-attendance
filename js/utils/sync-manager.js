@@ -84,6 +84,9 @@ const SyncManager = {
 
             console.log(`[SyncManager] Syncing ${unsyncedPunches.length} punches...`);
 
+            // Track which labor+date combinations need recalculation
+            const recalculateSet = new Set();
+
             for (const punch of unsyncedPunches) {
                 try {
                     // Upload photo if exists
@@ -95,13 +98,13 @@ const SyncManager = {
                         }
                     }
 
-                    // Save punch to server
+                    // Save punch to server (type will be fixed after all synced)
                     const result = await PunchAPI.savePunch({
                         laborId: punch.laborId,
                         departmentId: punch.departmentId,
                         date: punch.date,
                         time: punch.time,
-                        type: punch.type,
+                        type: punch.type || 'pending',
                         locationId: punch.locationId,
                         locationName: punch.locationName,
                         confidence: punch.confidence,
@@ -109,21 +112,171 @@ const SyncManager = {
                     });
 
                     if (result.success) {
-    await OfflineStorage.markPunchSynced(punch.id);
-    console.log(`[SyncManager] Punch ${punch.id} synced`);
-    
-    // Update last_sync_at for this laborer
-    await supabaseClient
-        .from('laborers')
-        .update({ last_sync_at: new Date().toISOString() })
-        .eq('labor_id', punch.laborId);
-}
+                        await OfflineStorage.markPunchSynced(punch.id);
+                        console.log(`[SyncManager] Punch ${punch.id} synced`);
+                        
+                        // Track for recalculation
+                        recalculateSet.add(`${punch.laborId}|${punch.date}`);
+                        
+                        // Update last_sync_at for this laborer
+                        await supabaseClient
+                            .from('laborers')
+                            .update({ last_sync_at: new Date().toISOString() })
+                            .eq('labor_id', punch.laborId);
+                    }
                 } catch (err) {
                     console.error(`[SyncManager] Failed to sync punch ${punch.id}:`, err);
                 }
             }
+
+            // Fix punch types and recalculate attendance for affected days
+            for (const key of recalculateSet) {
+                const [laborId, date] = key.split('|');
+                await this.fixPunchTypesAndRecalculate(laborId, date);
+            }
+
         } catch (error) {
             console.error('[SyncManager] Sync punches error:', error);
+        }
+    },
+
+    // Fix punch types and recalculate daily attendance
+    async fixPunchTypesAndRecalculate(laborId, date) {
+        try {
+            console.log(`[SyncManager] Fixing punches for ${laborId} on ${date}`);
+
+            // Get all punches for this labor+date, sorted by time
+            const { data: punches, error } = await supabaseClient
+                .from('punch_records')
+                .select('id, time, type')
+                .eq('labor_id', laborId)
+                .eq('date', date)
+                .order('time', { ascending: true });
+
+            if (error) throw error;
+
+            if (!punches || punches.length === 0) return;
+
+            // Fix types: alternate login/logout starting with login
+            for (let i = 0; i < punches.length; i++) {
+                const correctType = (i % 2 === 0) ? 'login' : 'logout';
+                
+                if (punches[i].type !== correctType) {
+                    // Update punch type in database
+                    await supabaseClient
+                        .from('punch_records')
+                        .update({ type: correctType })
+                        .eq('id', punches[i].id);
+                    
+                    console.log(`[SyncManager] Fixed punch ${punches[i].id}: ${punches[i].type} → ${correctType}`);
+                }
+            }
+
+            // Recalculate daily attendance
+            await this.recalculateDailyAttendance(laborId, date);
+
+        } catch (error) {
+            console.error(`[SyncManager] Fix punch types error:`, error);
+        }
+    },
+
+    // Recalculate daily attendance for a labor+date
+    async recalculateDailyAttendance(laborId, date) {
+        try {
+            console.log(`[SyncManager] Recalculating attendance for ${laborId} on ${date}`);
+
+            // Call the database function
+            const { error } = await supabaseClient
+                .rpc('update_daily_attendance', {
+                    p_labor_id: laborId,
+                    p_date: date
+                });
+
+            if (error) {
+                console.error('[SyncManager] RPC error:', error);
+                // Fallback: manual calculation
+                await this.manualRecalculate(laborId, date);
+            } else {
+                console.log(`[SyncManager] Attendance recalculated for ${laborId} on ${date}`);
+            }
+
+        } catch (error) {
+            console.error(`[SyncManager] Recalculate attendance error:`, error);
+        }
+    },
+
+    // Manual fallback recalculation
+    async manualRecalculate(laborId, date) {
+        try {
+            // Get punches
+            const { data: punches } = await supabaseClient
+                .from('punch_records')
+                .select('time, type')
+                .eq('labor_id', laborId)
+                .eq('date', date)
+                .order('time', { ascending: true });
+
+            if (!punches || punches.length === 0) return;
+
+            // Find first login and last logout
+            const firstLogin = punches.find(p => p.type === 'login');
+            const lastLogout = [...punches].reverse().find(p => p.type === 'logout');
+
+            let totalHours = 0;
+            let status = 'A';
+
+            if (firstLogin && lastLogout) {
+                const [lh, lm] = firstLogin.time.split(':').map(Number);
+                const [oh, om] = lastLogout.time.split(':').map(Number);
+                totalHours = ((oh * 60 + om) - (lh * 60 + lm)) / 60;
+
+                // Get settings for thresholds
+                const { data: settings } = await supabaseClient
+                    .from('settings')
+                    .select('setting_value')
+                    .in('setting_key', ['min_hours_present', 'min_hours_half_day']);
+
+                let minPresent = 10, minHalf = 4;
+                if (settings) {
+                    settings.forEach(s => {
+                        if (s.setting_key === 'min_hours_present') minPresent = parseFloat(s.setting_value);
+                        if (s.setting_key === 'min_hours_half_day') minHalf = parseFloat(s.setting_value);
+                    });
+                }
+
+                if (totalHours >= minPresent) status = 'P';
+                else if (totalHours >= minHalf) status = 'H';
+                else status = 'A';
+            }
+
+            // Get department
+            const { data: labor } = await supabaseClient
+                .from('laborers')
+                .select('department_id')
+                .eq('labor_id', laborId)
+                .single();
+
+            // Upsert daily attendance
+            await supabaseClient
+                .from('daily_attendance')
+                .upsert({
+                    labor_id: laborId,
+                    department_id: labor?.department_id,
+                    date: date,
+                    first_login: firstLogin?.time || null,
+                    last_logout: lastLogout?.time || null,
+                    total_hours: totalHours,
+                    auto_status: status,
+                    final_status: status,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'labor_id,date'
+                });
+
+            console.log(`[SyncManager] Manual recalculation done: ${laborId} ${date} = ${totalHours.toFixed(2)}h, ${status}`);
+
+        } catch (error) {
+            console.error('[SyncManager] Manual recalculate error:', error);
         }
     },
 
@@ -208,5 +361,4 @@ const SyncManager = {
             lastSyncTime: lastSync
         };
     }
-
 };
