@@ -246,7 +246,7 @@ const PunchAPI = {
                     department_id: punch.departmentId,
                     date: punchDate,
                     time: punch.time,
-                    type: punch.type,
+                    type: 'punch',
                     location_id: punch.locationId,
                     location_name: punch.locationName,
                     confidence: punch.confidence,
