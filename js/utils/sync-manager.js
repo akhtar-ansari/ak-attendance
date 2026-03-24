@@ -104,7 +104,7 @@ const SyncManager = {
                         departmentId: punch.departmentId,
                         date: punch.date,
                         time: punch.time,
-                        type: punch.type || 'pending',
+                        type: 'punch',
                         locationId: punch.locationId,
                         locationName: punch.locationName,
                         confidence: punch.confidence,
