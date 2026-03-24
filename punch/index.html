@@ -530,15 +530,20 @@ if (typeof PushNotifications !== 'undefined') {
             });
         }
 
-        // Load initial data (online)
-        async function loadInitialData() {
-            try {
-                // Load all active laborers with face enrolled
-                const result = await LaborAPI.getActive();
-                if (result.success) {
-                    allLaborers = result.data.filter(l => l.face_enrolled);
-                    console.log(`[Online] Loaded ${allLaborers.length} laborers`);
-                }
+        /// Load initial data (online)
+async function loadInitialData() {
+    try {
+        // Load all active laborers with face enrolled (no client filter for punch terminal)
+        const { data, error } = await supabaseClient
+            .from('laborers')
+            .select('*')
+            .eq('status', 'active')
+            .eq('face_enrolled', true);
+        
+        if (!error && data) {
+            allLaborers = data;
+            console.log(`[Online] Loaded ${allLaborers.length} laborers`);
+        }
 
                 // Load settings
                 const { data: settingsData } = await supabaseClient.from('settings').select('*');
