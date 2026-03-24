@@ -132,7 +132,7 @@ const SyncManager = {
             // Fix punch types and recalculate attendance for affected days
             for (const key of recalculateSet) {
                 const [laborId, date] = key.split('|');
-                await this.fixPunchTypesAndRecalculate(laborId, date);
+                await this.recalculateDailyAttendance(laborId, date);
             }
 
         } catch (error) {
@@ -140,47 +140,7 @@ const SyncManager = {
         }
     },
 
-    // Fix punch types and recalculate daily attendance
-    async fixPunchTypesAndRecalculate(laborId, date) {
-        try {
-            console.log(`[SyncManager] Fixing punches for ${laborId} on ${date}`);
-
-            // Get all punches for this labor+date, sorted by time
-            const { data: punches, error } = await supabaseClient
-                .from('punch_records')
-                .select('id, time, type')
-                .eq('labor_id', laborId)
-                .eq('date', date)
-                .order('time', { ascending: true });
-
-            if (error) throw error;
-
-            if (!punches || punches.length === 0) return;
-
-            // Fix types: alternate login/logout starting with login
-            for (let i = 0; i < punches.length; i++) {
-                const correctType = (i % 2 === 0) ? 'login' : 'logout';
-                
-                if (punches[i].type !== correctType) {
-                    // Update punch type in database
-                    await supabaseClient
-                        .from('punch_records')
-                        .update({ type: correctType })
-                        .eq('id', punches[i].id);
-                    
-                    console.log(`[SyncManager] Fixed punch ${punches[i].id}: ${punches[i].type} → ${correctType}`);
-                }
-            }
-
-            // Recalculate daily attendance
-            await this.recalculateDailyAttendance(laborId, date);
-
-        } catch (error) {
-            console.error(`[SyncManager] Fix punch types error:`, error);
-        }
-    },
-
-    // Recalculate daily attendance for a labor+date
+        // Recalculate daily attendance for a labor+date
     async recalculateDailyAttendance(laborId, date) {
         try {
             console.log(`[SyncManager] Recalculating attendance for ${laborId} on ${date}`);
