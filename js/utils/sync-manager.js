@@ -1,4 +1,4 @@
-// AK Attendance - Sync Manager
+// AK Attendance - Sync Manager (Multi-Client SaaS)
 const SyncManager = {
     isSyncing: false,
     lastSyncTime: null,
@@ -33,6 +33,19 @@ const SyncManager = {
         return navigator.onLine;
     },
 
+    // Get client ID (from AUTH object or CLIENT_SESSION)
+    getClientId() {
+        // Try AUTH first (used by admin/reports)
+        if (typeof AUTH !== 'undefined' && AUTH.getClientId && AUTH.getClientId()) {
+            return AUTH.getClientId();
+        }
+        // Try CLIENT_SESSION (used by punch terminal)
+        if (typeof CLIENT_SESSION !== 'undefined' && CLIENT_SESSION.clientId) {
+            return CLIENT_SESSION.clientId;
+        }
+        return null;
+    },
+
     // Sync everything
     async syncAll() {
         if (this.isSyncing) {
@@ -42,6 +55,12 @@ const SyncManager = {
 
         if (!this.isOnline()) {
             console.log('[SyncManager] Offline, skipping sync');
+            return;
+        }
+
+        const clientId = this.getClientId();
+        if (!clientId) {
+            console.log('[SyncManager] No client ID, skipping sync');
             return;
         }
 
@@ -74,6 +93,12 @@ const SyncManager = {
     async syncPunches() {
         if (!this.isOnline()) return;
 
+        const clientId = this.getClientId();
+        if (!clientId) {
+            console.log('[SyncManager] No client ID for sync');
+            return;
+        }
+
         try {
             const unsyncedPunches = await OfflineStorage.getUnsyncedPunches();
             
@@ -98,32 +123,42 @@ const SyncManager = {
                         }
                     }
 
-                    // Save punch to server (type will be fixed after all synced)
-                    const result = await PunchAPI.savePunch({
-                        laborId: punch.laborId,
-                        departmentId: punch.departmentId,
-                        date: punch.date,
-                        time: punch.time,
-                        type: 'punch',
-                        locationId: punch.locationId,
-                        locationName: punch.locationName,
-                        confidence: punch.confidence,
-                        photoUrl: photoUrl
-                    });
+                    // Use client_id from punch data (saved during offline punch) or fall back to current session
+                    const punchClientId = punch.clientId || clientId;
 
-                    if (result.success) {
-                        await OfflineStorage.markPunchSynced(punch.id);
-                        console.log(`[SyncManager] Punch ${punch.id} synced`);
-                        
-                        // Track for recalculation
-                        recalculateSet.add(`${punch.laborId}|${punch.date}`);
-                        
-                        // Update last_sync_at for this laborer
-                        await supabaseClient
-                            .from('laborers')
-                            .update({ last_sync_at: new Date().toISOString() })
-                            .eq('labor_id', punch.laborId);
-                    }
+                    // Save punch to server
+                    const { data, error } = await supabaseClient
+                        .from('punch_records')
+                        .insert({
+                            labor_id: punch.laborId,
+                            department_id: punch.departmentId,
+                            date: punch.date,
+                            time: punch.time,
+                            type: 'punch',
+                            location_id: punch.locationId,
+                            location_name: punch.locationName,
+                            confidence: punch.confidence,
+                            photo_url: photoUrl,
+                            client_id: punchClientId
+                        })
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    await OfflineStorage.markPunchSynced(punch.id);
+                    console.log(`[SyncManager] Punch ${punch.id} synced`);
+                    
+                    // Track for recalculation
+                    recalculateSet.add(`${punch.laborId}|${punch.date}`);
+                    
+                    // Update last_sync_at for this laborer
+                    await supabaseClient
+                        .from('laborers')
+                        .update({ last_sync_at: new Date().toISOString() })
+                        .eq('labor_id', punch.laborId)
+                        .eq('client_id', punchClientId);
+
                 } catch (err) {
                     console.error(`[SyncManager] Failed to sync punch ${punch.id}:`, err);
                 }
@@ -140,7 +175,7 @@ const SyncManager = {
         }
     },
 
-        // Recalculate daily attendance for a labor+date
+    // Recalculate daily attendance for a labor+date
     async recalculateDailyAttendance(laborId, date) {
         try {
             console.log(`[SyncManager] Recalculating attendance for ${laborId} on ${date}`);
@@ -167,11 +202,15 @@ const SyncManager = {
 
     // Manual fallback recalculation
     async manualRecalculate(laborId, date) {
+        const clientId = this.getClientId();
+        if (!clientId) return;
+
         try {
             // Get punches
             const { data: punches } = await supabaseClient
                 .from('punch_records')
                 .select('time, type')
+                .eq('client_id', clientId)
                 .eq('labor_id', laborId)
                 .eq('date', date)
                 .order('time', { ascending: true });
@@ -194,6 +233,7 @@ const SyncManager = {
                 const { data: settings } = await supabaseClient
                     .from('settings')
                     .select('setting_value')
+                    .eq('client_id', clientId)
                     .in('setting_key', ['min_hours_present', 'min_hours_half_day']);
 
                 let minPresent = 10, minHalf = 4;
@@ -213,6 +253,7 @@ const SyncManager = {
             const { data: labor } = await supabaseClient
                 .from('laborers')
                 .select('department_id')
+                .eq('client_id', clientId)
                 .eq('labor_id', laborId)
                 .single();
 
@@ -228,6 +269,7 @@ const SyncManager = {
                     total_hours: totalHours,
                     auto_status: status,
                     final_status: status,
+                    client_id: clientId,
                     updated_at: new Date().toISOString()
                 }, {
                     onConflict: 'labor_id,date'
@@ -240,9 +282,15 @@ const SyncManager = {
         }
     },
 
-    // Download face descriptors from server
+    // Download face descriptors from server - FILTERED BY CLIENT
     async downloadFaceDescriptors() {
         if (!this.isOnline()) return;
+
+        const clientId = this.getClientId();
+        if (!clientId) {
+            console.log('[SyncManager] No client ID for download');
+            return;
+        }
 
         try {
             console.log('[SyncManager] Downloading face descriptors...');
@@ -250,6 +298,7 @@ const SyncManager = {
             const { data, error } = await supabaseClient
                 .from('laborers')
                 .select('labor_id, name, department_id, face_descriptor')
+                .eq('client_id', clientId)
                 .eq('status', 'active')
                 .eq('face_enrolled', true);
 
@@ -263,15 +312,21 @@ const SyncManager = {
             }));
 
             await OfflineStorage.saveFaceDescriptors(descriptors);
-            console.log(`[SyncManager] Downloaded ${descriptors.length} descriptors`);
+            console.log(`[SyncManager] Downloaded ${descriptors.length} descriptors for client`);
         } catch (error) {
             console.error('[SyncManager] Download descriptors error:', error);
         }
     },
 
-    // Download punch locations from server
+    // Download punch locations from server - FILTERED BY CLIENT
     async downloadPunchLocations() {
         if (!this.isOnline()) return;
+
+        const clientId = this.getClientId();
+        if (!clientId) {
+            console.log('[SyncManager] No client ID for download');
+            return;
+        }
 
         try {
             console.log('[SyncManager] Downloading punch locations...');
@@ -279,12 +334,13 @@ const SyncManager = {
             const { data, error } = await supabaseClient
                 .from('punch_locations')
                 .select('*')
+                .eq('client_id', clientId)
                 .eq('status', 'active');
 
             if (error) throw error;
 
             await OfflineStorage.savePunchLocations(data || []);
-            console.log(`[SyncManager] Downloaded ${data?.length || 0} locations`);
+            console.log(`[SyncManager] Downloaded ${data?.length || 0} locations for client`);
         } catch (error) {
             console.error('[SyncManager] Download locations error:', error);
         }
