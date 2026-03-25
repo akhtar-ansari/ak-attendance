@@ -1,0 +1,129 @@
+name: Photo Cleanup
+
+# Run daily at 2:00 AM Riyadh time (UTC+3 = 23:00 UTC previous day)
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Cleanup old punch photos
+        uses: actions/github-script@v7
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        with:
+          script: |
+            const SUPABASE_URL = process.env.SUPABASE_URL;
+            const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            
+            if (!SUPABASE_URL || !SUPABASE_KEY) {
+              console.log('❌ Missing Supabase credentials');
+              return;
+            }
+            
+            const headers = {
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/json'
+            };
+            
+            // Calculate cutoff date (15 days ago)
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - 15);
+            const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+            
+            // Calculate month closure (1st of current month)
+            // Photos from previous months are eligible for deletion
+            const today = new Date();
+            const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const monthClosureStr = firstOfMonth.toISOString().split('T')[0];
+            
+            console.log(`📅 Cutoff date (15 days ago): ${cutoffDateStr}`);
+            console.log(`📅 Month closure date: ${monthClosureStr}`);
+            console.log(`📅 Will delete photos from dates < ${cutoffDateStr} AND < ${monthClosureStr}`);
+            
+            // The effective cutoff is the earlier of the two dates
+            // But we need BOTH conditions: older than 15 days AND month closed
+            // So we use the LATER date as cutoff (more restrictive)
+            const effectiveCutoff = cutoffDateStr > monthClosureStr ? monthClosureStr : cutoffDateStr;
+            console.log(`📅 Effective cutoff: ${effectiveCutoff}`);
+            
+            // Query punch_records with photo_url, older than 15 days, AND month closed
+            const queryUrl = `${SUPABASE_URL}/rest/v1/punch_records?photo_url=not.is.null&date=lt.${effectiveCutoff}&select=id,photo_url,date,labor_id`;
+            
+            console.log(`🔍 Querying for old photos...`);
+            
+            const response = await fetch(queryUrl, { headers });
+            
+            if (!response.ok) {
+              console.log(`❌ Query failed: ${response.status} ${response.statusText}`);
+              return;
+            }
+            
+            const records = await response.json();
+            console.log(`📸 Found ${records.length} photos to delete`);
+            
+            if (records.length === 0) {
+              console.log('✅ No photos to cleanup');
+              return;
+            }
+            
+            let deletedCount = 0;
+            let errorCount = 0;
+            
+            for (const record of records) {
+              try {
+                // Extract file path from URL
+                // URL format: https://xxx.supabase.co/storage/v1/object/public/punch-photos/punches/L1_123.jpg
+                const url = new URL(record.photo_url);
+                const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/punch-photos\/(.+)/);
+                
+                if (!pathMatch) {
+                  console.log(`⚠️ Could not parse path from: ${record.photo_url}`);
+                  continue;
+                }
+                
+                const filePath = pathMatch[1]; // e.g., "punches/L1_123.jpg"
+                
+                // Delete from storage
+                const deleteUrl = `${SUPABASE_URL}/storage/v1/object/punch-photos/${filePath}`;
+                const deleteResponse = await fetch(deleteUrl, {
+                  method: 'DELETE',
+                  headers
+                });
+                
+                if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                  console.log(`⚠️ Storage delete failed for ${filePath}: ${deleteResponse.status}`);
+                }
+                
+                // Set photo_url to NULL in database
+                const updateUrl = `${SUPABASE_URL}/rest/v1/punch_records?id=eq.${record.id}`;
+                const updateResponse = await fetch(updateUrl, {
+                  method: 'PATCH',
+                  headers,
+                  body: JSON.stringify({ photo_url: null })
+                });
+                
+                if (updateResponse.ok) {
+                  deletedCount++;
+                  console.log(`✅ Deleted: ${record.labor_id} - ${record.date}`);
+                } else {
+                  errorCount++;
+                  console.log(`❌ Update failed for ${record.id}: ${updateResponse.status}`);
+                }
+                
+              } catch (error) {
+                errorCount++;
+                console.log(`❌ Error processing ${record.id}: ${error.message}`);
+              }
+            }
+            
+            console.log(`\n📊 Summary:`);
+            console.log(`   ✅ Deleted: ${deletedCount}`);
+            console.log(`   ❌ Errors: ${errorCount}`);
+            console.log(`   📸 Total processed: ${records.length}`);
