@@ -152,7 +152,7 @@
                 { title: 'Reports', desc: 'View attendance', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
                 { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
                 { title: 'Punch Locations', desc: 'Manage locations', icon: '📍', link: 'attendance/punch-locations.html', class: 'tile-red' },
-                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: 'punch/index.html', class: 'tile-orange', target: '_blank' },
+                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: `punch/index.html?client=${session.clientCode}`, class: 'tile-orange', target: '_blank' },
                 { title: 'Settings', desc: 'System settings', icon: '⚙️', link: 'admin/settings.html', class: 'tile-teal' }
             );
             const container = document.getElementById('navigationTiles');
@@ -247,7 +247,7 @@
             
             actions.push(
                 `<button class="btn btn-secondary" onclick="location.href='reports/daily.html'">📊 Generate Report</button>`,
-                `<button class="btn btn-warning" onclick="window.open('punch/index.html', '_blank')">👆 Open Punch Terminal</button>`
+                `<button class="btn btn-warning" onclick="window.open('punch/index.html?client=${session.clientCode}', '_blank')">👆 Open Punch Terminal</button>`
             );
 
             if (actions.length > 0) {
