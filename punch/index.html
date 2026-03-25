@@ -626,99 +626,98 @@
         }
 
         // Initialize
-        window.onload = async function() {
-            console.log('[Init] Starting punch terminal...');
+window.onload = async function() {
+    console.log('[Init] Starting punch terminal...');
 
-            // Step 1: Get client code from URL
-            const clientCode = getClientCodeFromURL();
-            
-            if (!clientCode) {
-                showInvalidClientError('Missing client parameter. URL should be: punch/?client=AE1');
+    // Step 1: Initialize offline storage FIRST
+    await OfflineStorage.init();
+
+    // Step 2: Get client code from URL
+    const clientCode = getClientCodeFromURL();
+    
+    if (!clientCode) {
+        showInvalidClientError('Missing client parameter. URL should be: punch/?client=AE1');
+        return;
+    }
+
+    console.log(`[Init] Client code from URL: ${clientCode}`);
+
+    // Step 3: Validate client
+    if (!navigator.onLine) {
+        // Try to load from offline storage
+        const cachedClient = await OfflineStorage.getSetting('client_session');
+        if (cachedClient) {
+            const parsed = JSON.parse(cachedClient);
+            if (parsed.clientCode === clientCode) {
+                CLIENT_SESSION = parsed;
+                console.log('[Init] Using cached client session');
+            } else {
+                showInvalidClientError('Offline mode requires matching cached client');
                 return;
             }
+        } else {
+            showInvalidClientError('First load requires internet connection');
+            return;
+        }
+    } else {
+        // Online - validate against database
+        const validation = await validateClient(clientCode);
+        
+        if (!validation.valid) {
+            showInvalidClientError(validation.error);
+            return;
+        }
 
-            console.log(`[Init] Client code from URL: ${clientCode}`);
-
-            // Step 2: Validate client (requires internet for first load)
-            if (!navigator.onLine) {
-                // Try to load from offline storage
-                const cachedClient = await OfflineStorage.getSetting('client_session');
-                if (cachedClient) {
-                    const parsed = JSON.parse(cachedClient);
-                    if (parsed.clientCode === clientCode) {
-                        CLIENT_SESSION = parsed;
-                        console.log('[Init] Using cached client session');
-                    } else {
-                        showInvalidClientError('Offline mode requires matching cached client');
-                        return;
-                    }
-                } else {
-                    showInvalidClientError('First load requires internet connection');
-                    return;
-                }
-            } else {
-                // Online - validate against database
-                const validation = await validateClient(clientCode);
-                
-                if (!validation.valid) {
-                    showInvalidClientError(validation.error);
-                    return;
-                }
-
-                // Set client session
-                CLIENT_SESSION = {
-                    clientId: validation.clientId,
-                    clientCode: validation.clientCode,
-                    businessName: validation.businessName
-                };
-                
-                console.log(`[Init] Client validated: ${CLIENT_SESSION.businessName} (${CLIENT_SESSION.clientCode})`);
-            }
-
-            // Step 3: Show main container
-            document.getElementById('loadingScreen').classList.add('hidden');
-            document.getElementById('mainContainer').style.display = 'flex';
-            
-            // Show client badge
-            document.getElementById('clientBadge').textContent = `${CLIENT_SESSION.businessName}`;
-
-            // Step 4: Initialize offline storage
-            await OfflineStorage.init();
-
-            // Step 5: Cache client session for offline use (AFTER OfflineStorage.init)
-            await OfflineStorage.saveSetting('client_session', JSON.stringify(CLIENT_SESSION));
-
-            // Step 6: Start clock
-            updateDateTime();
-            setInterval(updateDateTime, 1000);
-
-            // Step 7: Load data
-            if (navigator.onLine) {
-                isOfflineMode = false;
-                await loadInitialData();
-                await SyncManager.init();
-                
-                // Listen for foreground notifications
-                if (typeof PushNotifications !== 'undefined') {
-                    await PushNotifications.init();
-                    PushNotifications.onMessage((payload) => {
-                        alert('Notification: ' + payload.notification?.title + ' - ' + payload.notification?.body);
-                    });
-                }
-            } else {
-                isOfflineMode = true;
-                await loadOfflineData();
-            }
-
-            // Step 8: Load face models
-            await loadFaceModels();
-            
-            // Step 9: Start camera
-            await startCamera();
-            
-            // Step 10: Detect location
-            detectLocation();
+        // Set client session
+        CLIENT_SESSION = {
+            clientId: validation.clientId,
+            clientCode: validation.clientCode,
+            businessName: validation.businessName
         };
+
+        // Cache for offline use
+        await OfflineStorage.saveSetting('client_session', JSON.stringify(CLIENT_SESSION));
+        console.log(`[Init] Client validated: ${CLIENT_SESSION.businessName} (${CLIENT_SESSION.clientCode})`);
+    }
+
+    // Step 4: Show main container
+    document.getElementById('loadingScreen').classList.add('hidden');
+    document.getElementById('mainContainer').style.display = 'flex';
+    
+    // Show client badge
+    document.getElementById('clientBadge').textContent = `${CLIENT_SESSION.businessName}`;
+
+    // Step 5: Start clock
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    // Step 6: Load data
+    if (navigator.onLine) {
+        isOfflineMode = false;
+        await loadInitialData();
+        await SyncManager.init();
+        
+        // Listen for foreground notifications
+        if (typeof PushNotifications !== 'undefined') {
+            await PushNotifications.init();
+            PushNotifications.onMessage((payload) => {
+                alert('Notification: ' + payload.notification?.title + ' - ' + payload.notification?.body);
+            });
+        }
+    } else {
+        isOfflineMode = true;
+        await loadOfflineData();
+    }
+
+    // Step 7: Load face models
+    await loadFaceModels();
+    
+    // Step 8: Start camera
+    await startCamera();
+    
+    // Step 9: Detect location
+    detectLocation();
+};
 
         // Update date time
         function updateDateTime() {
