@@ -461,11 +461,12 @@
 
     <script>
         // Minimal AUTH object for punch terminal (no login required)
-        const AUTH = {
-            getSession: () => null,
-            getDepartmentFilter: () => null,
-            logAction: async () => {}
-        };
+const AUTH = {
+    getSession: () => null,
+    getDepartmentFilter: () => null,
+    getClientId: () => null,
+    logAction: async () => {}
+};
 
         let modelsLoaded = false;
         let stream = null;
