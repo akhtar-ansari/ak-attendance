@@ -501,13 +501,13 @@
                 if (wasApproved) {
                     // Show approval info + reason button + undo (admin only)
                     lopActionHtml = `
-                        <div>
-                            <span class="badge status-P">${record.auto_status} → P</span>
-                            <button class="reason-btn" onclick="viewReason('${record.id}')" title="View reason">💬</button>
-                            <div class="approved-info">by ${record.approved_by}</div>
-                            ${isAdmin && !isFrozen ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
-                        </div>
-                    `;
+    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
+        <span class="badge status-P">${record.auto_status} → P</span>
+        <button class="reason-btn" onclick="viewReason('${record.id}')" title="View reason">💬</button>
+        <span style="font-size: 11px; color: #38a169;">by ${record.approved_by}</span>
+        ${isAdmin && !isFrozen ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+    </div>
+`;
                 } else if (canApprove) {
                     lopActionHtml = `<button class="approve-btn" onclick="openApproveModal('${record.id}')">✓ Approve</button>`;
                 } else if (isFrozen && (record.auto_status === 'H' || record.auto_status === 'A')) {
