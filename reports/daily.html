@@ -49,6 +49,102 @@
         .photo-btn:hover {
             background: #3182ce;
         }
+        
+        /* LOP Styles */
+        .lop-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .lop-checkbox:disabled {
+            cursor: not-allowed;
+            opacity: 0.4;
+        }
+        .approve-btn {
+            background: #48bb78;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .approve-btn:hover {
+            background: #38a169;
+        }
+        .approve-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+        .undo-btn {
+            background: #ed8936;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .undo-btn:hover {
+            background: #dd6b20;
+        }
+        .reason-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 5px;
+        }
+        .reason-btn:hover {
+            background: #e2e8f0;
+            border-radius: 4px;
+        }
+        .approved-info {
+            font-size: 11px;
+            color: #38a169;
+            margin-top: 3px;
+        }
+        .bulk-actions {
+            display: none;
+            background: #667eea;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            align-items: center;
+            gap: 15px;
+        }
+        .bulk-actions.active {
+            display: flex;
+        }
+        .bulk-actions .count {
+            font-weight: bold;
+        }
+        .bulk-actions button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .bulk-actions button:hover {
+            background: #f0f0f0;
+        }
+        .bulk-actions .clear-btn {
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+        }
+        .frozen-badge {
+            background: #e2e8f0;
+            color: #718096;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -79,9 +175,9 @@
                         </select>
                     </div>
                     <div class="form-group">
-    <label>Search by Labor ID or Iqama</label>
-    <input type="text" id="laborFilter" class="form-control" placeholder="Leave empty for all laborers">
-</div>
+                        <label>Search by Labor ID or Iqama</label>
+                        <input type="text" id="laborFilter" class="form-control" placeholder="Leave empty for all laborers">
+                    </div>
                 </div>
                 <div class="action-buttons" style="margin-top: 15px;">
                     <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
@@ -113,11 +209,21 @@
                 </div>
             </div>
 
+            <!-- Bulk Actions Bar -->
+            <div class="bulk-actions" id="bulkActions">
+                <span><span class="count" id="selectedCount">0</span> selected</span>
+                <button type="button" onclick="openBulkApproveModal()">✓ Approve Selected</button>
+                <button type="button" class="clear-btn" onclick="clearSelection()">Clear</button>
+            </div>
+
             <!-- Report Table -->
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="selectAll" class="lop-checkbox" onchange="toggleSelectAll()" title="Select All">
+                            </th>
                             <th>Date</th>
                             <th>Labor ID</th>
                             <th>Name</th>
@@ -125,13 +231,15 @@
                             <th>Login</th>
                             <th>Logout</th>
                             <th>Hours</th>
-                            <th>Status</th>
+                            <th>Auto</th>
+                            <th>Final</th>
+                            <th>LOP Action</th>
                             <th>Photos</th>
                         </tr>
                     </thead>
                     <tbody id="reportTable">
                         <tr>
-                            <td colspan="9" class="text-center p-20 text-muted">
+                            <td colspan="12" class="text-center p-20 text-muted">
                                 Select date range and click "Generate Report"
                             </td>
                         </tr>
@@ -150,6 +258,40 @@
             </div>
             <div class="modal-body" id="photoModalBody">
                 <!-- Photos will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- LOP Approve Modal -->
+    <div class="modal-overlay" id="approveModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="approveModalTitle">Approve LOP</h2>
+                <button type="button" class="modal-close" onclick="closeApproveModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="approveInfo" style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;"></div>
+                <div class="form-group">
+                    <label>Reason / Remarks <span style="color: red;">*</span></label>
+                    <textarea id="approveReason" class="form-control" rows="3" placeholder="Enter reason for LOP approval (mandatory)"></textarea>
+                </div>
+                <div class="action-buttons" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeApproveModal()">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="confirmApprove()">✓ Approve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOP Reason View Modal -->
+    <div class="modal-overlay" id="reasonModal">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>LOP Details</h2>
+                <button type="button" class="modal-close" onclick="closeReasonModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="reasonModalBody">
+                <!-- Reason details will be loaded here -->
             </div>
         </div>
     </div>
@@ -175,9 +317,14 @@
         }
 
         const session = AUTH.getSession();
+        const isAdmin = session.role === 'super_admin' || session.role === 'admin';
+        
         let departments = [];
         let laborers = [];
         let reportData = [];
+        let selectedIds = new Set();
+        let pendingApproveId = null;
+        let pendingBulkApprove = false;
 
         // Set default dates
         function setDefaultDates() {
@@ -211,12 +358,11 @@
                 const laborResult = await LaborAPI.getAll();
                 if (laborResult.success) {
                     laborers = laborResult.data;
-                    const laborSelect = document.getElementById('laborFilter');
-                    laborSelect.innerHTML = '<option value="">All Laborers</option>';
-                    
-                    laborers.forEach(labor => {
-                        laborSelect.innerHTML += `<option value="${labor.labor_id}">${labor.labor_id} - ${labor.name}</option>`;
-                    });
+                }
+
+                // Hide select all checkbox if not admin
+                if (!isAdmin) {
+                    document.getElementById('selectAll').style.display = 'none';
                 }
 
                 SyncIndicator.hide();
@@ -224,6 +370,18 @@
                 SyncIndicator.hide();
                 Toast.error('Failed to load filters');
             }
+        }
+
+        // Check if date is within approval window
+        function isDateApprovable(dateStr) {
+            const recordDate = new Date(dateStr);
+            const today = new Date();
+            
+            // Get 1st of next month
+            const nextMonth1st = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+            nextMonth1st.setHours(23, 59, 59, 999);
+            
+            return recordDate <= nextMonth1st;
         }
 
         // Generate report
@@ -245,6 +403,8 @@
 
             try {
                 SyncIndicator.show('Generating report...');
+                selectedIds.clear();
+                updateBulkActions();
 
                 const result = await ReportAPI.getDailyAttendance(fromDate, toDate, departmentId);
 
@@ -255,15 +415,15 @@
                 reportData = result.data;
 
                 // Filter by labor ID or Iqama search
-if (laborSearch) {
-    const search = laborSearch.toLowerCase();
-    reportData = reportData.filter(r => {
-        const labor = laborers.find(l => l.labor_id === r.labor_id);
-        const iqama = labor?.iqama_number || '';
-        return r.labor_id.toLowerCase().includes(search) || 
-               iqama.toLowerCase().includes(search);
-    });
-}
+                if (laborSearch) {
+                    const search = laborSearch.toLowerCase();
+                    reportData = reportData.filter(r => {
+                        const labor = laborers.find(l => l.labor_id === r.labor_id);
+                        const iqama = labor?.iqama_number || '';
+                        return r.labor_id.toLowerCase().includes(search) || 
+                               iqama.toLowerCase().includes(search);
+                    });
+                }
 
                 // Calculate summary
                 const presentCount = reportData.filter(r => r.final_status === 'P').length;
@@ -299,7 +459,7 @@ if (laborSearch) {
             if (reportData.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="9" class="text-center p-20 text-muted">
+                        <td colspan="12" class="text-center p-20 text-muted">
                             No records found for selected criteria
                         </td>
                     </tr>
@@ -312,12 +472,53 @@ if (laborSearch) {
                 const laborName = labor?.name || record.laborers?.name || 'Unknown';
                 const deptName = labor?.departments?.name || '-';
                 
-                const statusClass = `status-${record.final_status}`;
-                const statusText = record.final_status === 'P' ? 'Present' : 
-                                   record.final_status === 'H' ? 'Half Day' : 'Absent';
+                const autoStatusClass = `status-${record.auto_status}`;
+                const autoStatusText = record.auto_status === 'P' ? 'P' : 
+                                       record.auto_status === 'H' ? 'H' : 'A';
+
+                const finalStatusClass = `status-${record.final_status}`;
+                const finalStatusText = record.final_status === 'P' ? 'P' : 
+                                        record.final_status === 'H' ? 'H' : 'A';
+
+                const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') && 
+                                   !record.approved_by && 
+                                   isDateApprovable(record.date);
+                
+                const wasApproved = record.approved_by && record.final_status === 'P';
+                const isFrozen = !isDateApprovable(record.date);
+                
+                // Checkbox logic: only show for approvable records, admin only for bulk
+                let checkboxHtml = '';
+                if (isAdmin && canApprove) {
+                    const isChecked = selectedIds.has(record.id) ? 'checked' : '';
+                    checkboxHtml = `<input type="checkbox" class="lop-checkbox" data-id="${record.id}" ${isChecked} onchange="toggleSelect('${record.id}')">`;
+                } else {
+                    checkboxHtml = `<input type="checkbox" class="lop-checkbox" disabled>`;
+                }
+
+                // LOP Action column
+                let lopActionHtml = '';
+                if (wasApproved) {
+                    // Show approval info + reason button + undo (admin only)
+                    lopActionHtml = `
+                        <div>
+                            <span class="badge status-P">${record.auto_status} → P</span>
+                            <button class="reason-btn" onclick="viewReason('${record.id}')" title="View reason">💬</button>
+                            <div class="approved-info">by ${record.approved_by}</div>
+                            ${isAdmin && !isFrozen ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+                        </div>
+                    `;
+                } else if (canApprove) {
+                    lopActionHtml = `<button class="approve-btn" onclick="openApproveModal('${record.id}')">✓ Approve</button>`;
+                } else if (isFrozen && (record.auto_status === 'H' || record.auto_status === 'A')) {
+                    lopActionHtml = `<span class="frozen-badge">🔒 Frozen</span>`;
+                } else {
+                    lopActionHtml = '-';
+                }
 
                 return `
                     <tr>
+                        <td>${checkboxHtml}</td>
                         <td>${DateUtils.formatDate(record.date)}</td>
                         <td><strong>${record.labor_id}</strong></td>
                         <td>${laborName}</td>
@@ -325,7 +526,9 @@ if (laborSearch) {
                         <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
                         <td>${record.total_hours ? parseFloat(record.total_hours).toFixed(1) + 'h' : '-'}</td>
-                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td><span class="badge ${autoStatusClass}">${autoStatusText}</span></td>
+                        <td><span class="badge ${finalStatusClass}">${finalStatusText}</span></td>
+                        <td>${lopActionHtml}</td>
                         <td>
                             <button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">
                                 📷 View
@@ -334,9 +537,227 @@ if (laborSearch) {
                     </tr>
                 `;
             }).join('');
+
+            updateSelectAllState();
         }
 
-        // View photos
+        // ============ SELECTION FUNCTIONS ============
+
+        function toggleSelect(id) {
+            if (selectedIds.has(id)) {
+                selectedIds.delete(id);
+            } else {
+                selectedIds.add(id);
+            }
+            updateBulkActions();
+            updateSelectAllState();
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.lop-checkbox[data-id]');
+            
+            if (selectAllCheckbox.checked) {
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    selectedIds.add(cb.dataset.id);
+                });
+            } else {
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    selectedIds.delete(cb.dataset.id);
+                });
+            }
+            updateBulkActions();
+        }
+
+        function updateSelectAllState() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.lop-checkbox[data-id]');
+            const checkedCount = document.querySelectorAll('.lop-checkbox[data-id]:checked').length;
+            
+            if (checkboxes.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+
+        function updateBulkActions() {
+            const bulkActions = document.getElementById('bulkActions');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            if (selectedIds.size > 0 && isAdmin) {
+                bulkActions.classList.add('active');
+                selectedCount.textContent = selectedIds.size;
+            } else {
+                bulkActions.classList.remove('active');
+            }
+        }
+
+        function clearSelection() {
+            selectedIds.clear();
+            document.querySelectorAll('.lop-checkbox[data-id]').forEach(cb => cb.checked = false);
+            document.getElementById('selectAll').checked = false;
+            updateBulkActions();
+        }
+
+        // ============ APPROVE FUNCTIONS ============
+
+        function openApproveModal(recordId) {
+            pendingApproveId = recordId;
+            pendingBulkApprove = false;
+            
+            const record = reportData.find(r => r.id === recordId);
+            const labor = laborers.find(l => l.labor_id === record.labor_id);
+            
+            document.getElementById('approveModalTitle').textContent = 'Approve LOP';
+            document.getElementById('approveInfo').innerHTML = `
+                <div><strong>Labor:</strong> ${labor?.name || record.labor_id} (${record.labor_id})</div>
+                <div><strong>Date:</strong> ${DateUtils.formatDate(record.date)}</div>
+                <div><strong>Status:</strong> ${record.auto_status} → P</div>
+            `;
+            document.getElementById('approveReason').value = '';
+            document.getElementById('approveModal').classList.add('active');
+        }
+
+        function openBulkApproveModal() {
+            if (selectedIds.size === 0) {
+                Toast.error('No records selected');
+                return;
+            }
+
+            pendingApproveId = null;
+            pendingBulkApprove = true;
+            
+            document.getElementById('approveModalTitle').textContent = 'Bulk Approve LOP';
+            document.getElementById('approveInfo').innerHTML = `
+                <div><strong>Selected Records:</strong> ${selectedIds.size}</div>
+                <div style="color: #718096; font-size: 13px; margin-top: 5px;">All selected Half Day / Absent records will be marked as Present</div>
+            `;
+            document.getElementById('approveReason').value = '';
+            document.getElementById('approveModal').classList.add('active');
+        }
+
+        function closeApproveModal() {
+            document.getElementById('approveModal').classList.remove('active');
+            pendingApproveId = null;
+            pendingBulkApprove = false;
+        }
+
+        async function confirmApprove() {
+            const reason = document.getElementById('approveReason').value.trim();
+            
+            if (!reason) {
+                Toast.error('Reason is mandatory');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Approving...');
+
+                if (pendingBulkApprove) {
+                    // Bulk approve
+                    const result = await ReportAPI.bulkApproveLOP(Array.from(selectedIds), reason);
+                    
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+
+                    Toast.success(`Approved ${result.approvedCount} records${result.skippedCount > 0 ? `, skipped ${result.skippedCount}` : ''}`);
+                    clearSelection();
+                } else {
+                    // Single approve
+                    const result = await ReportAPI.approveLOP(pendingApproveId, reason);
+                    
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+
+                    Toast.success('LOP approved successfully');
+                }
+
+                closeApproveModal();
+                await generateReport(); // Refresh data
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to approve: ' + error.message);
+            }
+        }
+
+        async function undoApproval(recordId) {
+            if (!confirm('Are you sure you want to undo this approval?')) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Undoing...');
+                
+                const result = await ReportAPI.undoLOP(recordId);
+                
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                Toast.success('Approval undone');
+                await generateReport(); // Refresh data
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to undo: ' + error.message);
+            }
+        }
+
+        // ============ VIEW REASON ============
+
+        function viewReason(recordId) {
+            const record = reportData.find(r => r.id === recordId);
+            const labor = laborers.find(l => l.labor_id === record.labor_id);
+            
+            document.getElementById('reasonModalBody').innerHTML = `
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Labor</div>
+                    <div style="font-weight: 600;">${labor?.name || record.labor_id} (${record.labor_id})</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Date</div>
+                    <div style="font-weight: 600;">${DateUtils.formatDate(record.date)}</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Status Change</div>
+                    <div><span class="badge status-${record.auto_status}">${record.auto_status}</span> → <span class="badge status-P">P</span></div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Approved By</div>
+                    <div style="font-weight: 600;">${record.approved_by}</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Approved At</div>
+                    <div>${record.approved_at ? new Date(record.approved_at).toLocaleString() : '-'}</div>
+                </div>
+                <div style="background: #f7fafc; padding: 15px; border-radius: 8px;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 5px;">Reason</div>
+                    <div>${record.lop_reason || '-'}</div>
+                </div>
+            `;
+            document.getElementById('reasonModal').classList.add('active');
+        }
+
+        function closeReasonModal() {
+            document.getElementById('reasonModal').classList.remove('active');
+        }
+
+        // ============ PHOTO MODAL ============
+
         async function viewPhotos(laborId, date) {
             try {
                 SyncIndicator.show('Loading photos...');
@@ -398,12 +819,12 @@ if (laborSearch) {
             }
         }
 
-        // Close photo modal
         function closePhotoModal() {
             document.getElementById('photoModal').classList.remove('active');
         }
 
-        // Export CSV
+        // ============ EXPORT CSV ============
+
         function exportCSV() {
             if (reportData.length === 0) {
                 Toast.error('No data to export. Generate report first.');
@@ -421,7 +842,10 @@ if (laborSearch) {
                     'Login': DateUtils.formatTimeShort(record.first_login) || '-',
                     'Logout': DateUtils.formatTimeShort(record.last_logout) || '-',
                     'Hours': record.total_hours ? parseFloat(record.total_hours).toFixed(1) : '0',
-                    'Status': record.final_status
+                    'Auto Status': record.auto_status,
+                    'Final Status': record.final_status,
+                    'Approved By': record.approved_by || '-',
+                    'LOP Reason': record.lop_reason || '-'
                 };
             });
 
@@ -437,6 +861,4 @@ if (laborSearch) {
         loadFilters();
     </script>
 </body>
-
 </html>
-
