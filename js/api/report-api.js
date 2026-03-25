@@ -266,12 +266,13 @@ const ReportAPI = {
             const todayLogins = todayPunches?.filter(p => p.type === 'login').length || 0;
             const todayLogouts = todayPunches?.filter(p => p.type === 'logout').length || 0;
 
-            // Get pending LOP requests
+            // Get pending LOP count (H or A that can be approved)
             let lopQuery = supabaseClient
-                .from('lop_requests')
+                .from('daily_attendance')
                 .select('id', { count: 'exact', head: true })
                 .eq('client_id', AUTH.getClientId())
-                .eq('approval_status', 'pending');
+                .in('auto_status', ['H', 'A'])
+                .is('approved_by', null);
 
             if (departmentFilter) {
                 lopQuery = lopQuery.eq('department_id', departmentFilter);
@@ -296,6 +297,210 @@ const ReportAPI = {
             };
         } catch (error) {
             console.error('Get dashboard stats error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // ============ LOP APPROVAL FUNCTIONS ============
+
+    // Check if date is within approval window (until 1st of next month)
+    isDateApprovable(dateStr) {
+        const recordDate = new Date(dateStr);
+        const today = new Date();
+        
+        // Get 1st of next month
+        const nextMonth1st = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        nextMonth1st.setHours(23, 59, 59, 999); // End of day
+        
+        // Record date must be before 1st of next month
+        return recordDate <= nextMonth1st;
+    },
+
+    // Approve single LOP (Admin + Supervisor)
+    async approveLOP(recordId, reason) {
+        try {
+            const session = AUTH.getSession();
+            if (!session) {
+                return { success: false, error: 'Not authenticated' };
+            }
+
+            // Get the record first
+            const { data: record, error: fetchError } = await supabaseClient
+                .from('daily_attendance')
+                .select('*')
+                .eq('id', recordId)
+                .eq('client_id', AUTH.getClientId())
+                .single();
+
+            if (fetchError || !record) {
+                return { success: false, error: 'Record not found' };
+            }
+
+            // Check if already approved
+            if (record.final_status === 'P' && record.approved_by) {
+                return { success: false, error: 'Already approved' };
+            }
+
+            // Check if approvable (H or A only)
+            if (record.auto_status !== 'H' && record.auto_status !== 'A') {
+                return { success: false, error: 'Only Half Day or Absent can be approved' };
+            }
+
+            // Check date window
+            if (!this.isDateApprovable(record.date)) {
+                return { success: false, error: 'Approval period has ended for this date' };
+            }
+
+            // Update record
+            const { error: updateError } = await supabaseClient
+                .from('daily_attendance')
+                .update({
+                    final_status: 'P',
+                    approved_by: session.name,
+                    approved_at: new Date().toISOString(),
+                    lop_reason: reason,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', recordId)
+                .eq('client_id', AUTH.getClientId());
+
+            if (updateError) throw updateError;
+
+            // Log action
+            await AUTH.logAction('lop_approve', `Approved ${record.labor_id} on ${record.date}: ${record.auto_status} → P`);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Approve LOP error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Bulk approve LOP (Admin only)
+    async bulkApproveLOP(recordIds, reason) {
+        try {
+            const session = AUTH.getSession();
+            if (!session) {
+                return { success: false, error: 'Not authenticated' };
+            }
+
+            // Check admin role
+            if (session.role !== 'super_admin' && session.role !== 'admin') {
+                return { success: false, error: 'Bulk approval requires Admin access' };
+            }
+
+            if (!recordIds || recordIds.length === 0) {
+                return { success: false, error: 'No records selected' };
+            }
+
+            // Get all records
+            const { data: records, error: fetchError } = await supabaseClient
+                .from('daily_attendance')
+                .select('*')
+                .in('id', recordIds)
+                .eq('client_id', AUTH.getClientId());
+
+            if (fetchError) throw fetchError;
+
+            // Filter valid records
+            const validRecords = records.filter(r => {
+                const isApprovableStatus = (r.auto_status === 'H' || r.auto_status === 'A');
+                const notAlreadyApproved = !(r.final_status === 'P' && r.approved_by);
+                const withinWindow = this.isDateApprovable(r.date);
+                return isApprovableStatus && notAlreadyApproved && withinWindow;
+            });
+
+            if (validRecords.length === 0) {
+                return { success: false, error: 'No valid records to approve' };
+            }
+
+            const validIds = validRecords.map(r => r.id);
+
+            // Update all valid records
+            const { error: updateError } = await supabaseClient
+                .from('daily_attendance')
+                .update({
+                    final_status: 'P',
+                    approved_by: session.name,
+                    approved_at: new Date().toISOString(),
+                    lop_reason: reason,
+                    updated_at: new Date().toISOString()
+                })
+                .in('id', validIds)
+                .eq('client_id', AUTH.getClientId());
+
+            if (updateError) throw updateError;
+
+            // Log action
+            await AUTH.logAction('lop_bulk_approve', `Bulk approved ${validRecords.length} records`);
+
+            return { 
+                success: true, 
+                approvedCount: validRecords.length,
+                skippedCount: recordIds.length - validRecords.length
+            };
+        } catch (error) {
+            console.error('Bulk approve LOP error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Undo LOP approval (Admin only)
+    async undoLOP(recordId) {
+        try {
+            const session = AUTH.getSession();
+            if (!session) {
+                return { success: false, error: 'Not authenticated' };
+            }
+
+            // Check admin role
+            if (session.role !== 'super_admin' && session.role !== 'admin') {
+                return { success: false, error: 'Undo requires Admin access' };
+            }
+
+            // Get the record
+            const { data: record, error: fetchError } = await supabaseClient
+                .from('daily_attendance')
+                .select('*')
+                .eq('id', recordId)
+                .eq('client_id', AUTH.getClientId())
+                .single();
+
+            if (fetchError || !record) {
+                return { success: false, error: 'Record not found' };
+            }
+
+            // Check if was approved
+            if (!record.approved_by) {
+                return { success: false, error: 'Record was not approved' };
+            }
+
+            // Check date window
+            if (!this.isDateApprovable(record.date)) {
+                return { success: false, error: 'Undo period has ended for this date' };
+            }
+
+            // Revert to auto_status
+            const { error: updateError } = await supabaseClient
+                .from('daily_attendance')
+                .update({
+                    final_status: record.auto_status,
+                    approved_by: null,
+                    approved_at: null,
+                    lop_reason: null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', recordId)
+                .eq('client_id', AUTH.getClientId());
+
+            if (updateError) throw updateError;
+
+            // Log action
+            await AUTH.logAction('lop_undo', `Undid approval for ${record.labor_id} on ${record.date}: P → ${record.auto_status}`);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Undo LOP error:', error);
             return { success: false, error: error.message };
         }
     }
