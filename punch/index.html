@@ -671,9 +671,7 @@
                     clientCode: validation.clientCode,
                     businessName: validation.businessName
                 };
-
-                // Cache for offline use
-                await OfflineStorage.saveSetting('client_session', JSON.stringify(CLIENT_SESSION));
+                
                 console.log(`[Init] Client validated: ${CLIENT_SESSION.businessName} (${CLIENT_SESSION.clientCode})`);
             }
 
@@ -687,11 +685,14 @@
             // Step 4: Initialize offline storage
             await OfflineStorage.init();
 
-            // Step 5: Start clock
+            // Step 5: Cache client session for offline use (AFTER OfflineStorage.init)
+            await OfflineStorage.saveSetting('client_session', JSON.stringify(CLIENT_SESSION));
+
+            // Step 6: Start clock
             updateDateTime();
             setInterval(updateDateTime, 1000);
 
-            // Step 6: Load data
+            // Step 7: Load data
             if (navigator.onLine) {
                 isOfflineMode = false;
                 await loadInitialData();
@@ -709,13 +710,13 @@
                 await loadOfflineData();
             }
 
-            // Step 7: Load face models
+            // Step 8: Load face models
             await loadFaceModels();
             
-            // Step 8: Start camera
+            // Step 9: Start camera
             await startCamera();
             
-            // Step 9: Detect location
+            // Step 10: Detect location
             detectLocation();
         };
 
