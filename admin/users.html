@@ -74,9 +74,8 @@
                     <label>Role *</label>
                     <select id="userRole" class="form-control" onchange="toggleDepartmentField()">
                         <option value="">-- Select Role --</option>
-                        <option value="super_admin">Super Admin (Full Access)</option>
-                        <option value="admin">Admin (Department Access)</option>
-                        <option value="supervisor">Supervisor (Warehouse Only)</option>
+                        <option value="admin">Admin (Full Access)</option>
+                        <option value="supervisor">Supervisor (Department Only)</option>
                     </select>
                 </div>
                 
@@ -116,7 +115,7 @@
 
     <script>
         // Require Super Admin
-        if (!AUTH.requireRole(['super_admin'])) {
+        if (!AUTH.requireRole(['admin'])) {
             // Redirect handled by requireRole
         }
 
@@ -182,7 +181,6 @@
             }
 
             const roleLabels = {
-                'super_admin': 'Super Admin',
                 'admin': 'Admin',
                 'supervisor': 'Supervisor'
             };
@@ -203,7 +201,7 @@
                     <td>${DateUtils.formatDate(user.created_at)}</td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editUser('${user.id}')">✏️ Edit</button>
-                        ${user.role !== 'super_admin' || users.filter(u => u.role === 'super_admin').length > 1 ? 
+                        ${user.role !== 'admin' || users.filter(u => u.role === 'admin').length > 1 ? 
                             `<button class="btn btn-sm btn-danger" onclick="deleteUser('${user.id}')">🗑️ Delete</button>` : 
                             ''}
                     </td>
@@ -217,7 +215,7 @@
             const deptGroup = document.getElementById('departmentGroup');
             const deptSelect = document.getElementById('userDepartment');
 
-            if (role === 'super_admin') {
+            if (role === 'admin') {
                 deptGroup.style.display = 'none';
                 deptSelect.removeAttribute('required');
             } else {
@@ -290,7 +288,7 @@
                 return;
             }
 
-            if (role !== 'super_admin' && !departmentId) {
+            if (role !== 'admin' && !departmentId) {
                 Toast.error('Please select a department');
                 return;
             }
