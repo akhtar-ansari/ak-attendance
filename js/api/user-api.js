@@ -3,7 +3,7 @@ const UserAPI = {
     // Get all users (Super Admin only)
     async getAll() {
         try {
-            if (!AUTH.hasRole('super_admin')) {
+            if (!AUTH.hasRole('admin')) {
                 return { success: false, error: 'Access denied' };
             }
 
@@ -59,7 +59,7 @@ const UserAPI = {
     // Create new user (Super Admin only)
     async create(user) {
         try {
-            if (!AUTH.hasRole('super_admin')) {
+            if (!AUTH.hasRole('admin')) {
                 return { success: false, error: 'Access denied' };
             }
 
@@ -76,7 +76,7 @@ const UserAPI = {
             }
 
             // Validate role and department
-            if (user.role !== 'super_admin' && !user.departmentId) {
+            if (user.role !== 'admin' && !user.departmentId) {
                 return { success: false, error: 'Department is required for Admin and Supervisor' };
             }
 
@@ -87,7 +87,7 @@ const UserAPI = {
                     password_hash: user.password,
                     name: user.name.trim(),
                     role: user.role,
-                    department_id: user.role === 'super_admin' ? null : user.departmentId,
+                    department_id: user.role === 'admin' ? null : user.departmentId,
                     status: user.status || 'active',
                     client_id: AUTH.getClientId()
                 })
@@ -116,7 +116,7 @@ const UserAPI = {
     // Update user
     async update(id, updates) {
         try {
-            if (!AUTH.hasRole('super_admin')) {
+            if (!AUTH.hasRole('admin')) {
                 return { success: false, error: 'Access denied' };
             }
 
@@ -131,7 +131,7 @@ const UserAPI = {
             if (updates.name) updateObj.name = updates.name.trim();
             if (updates.role) updateObj.role = updates.role;
             if (updates.departmentId !== undefined) {
-                updateObj.department_id = updates.role === 'super_admin' ? null : updates.departmentId;
+                updateObj.department_id = updates.role === 'admin' ? null : updates.departmentId;
             }
             if (updates.status) updateObj.status = updates.status;
             if (updates.password) updateObj.password_hash = updates.password;
@@ -169,7 +169,7 @@ const UserAPI = {
     // Delete user (soft delete - set inactive)
     async delete(id) {
         try {
-            if (!AUTH.hasRole('super_admin')) {
+            if (!AUTH.hasRole('admin')) {
                 return { success: false, error: 'Access denied' };
             }
 
