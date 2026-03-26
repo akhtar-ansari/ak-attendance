@@ -207,7 +207,7 @@ const AUTH = {
         if (!session) return false;
         
         // Super admin can access all
-        if (session.role === 'super_admin') return true;
+        if (session.role === 'admin') return true;
         
         // Others can only access their department
         return session.departmentId === departmentId;
@@ -231,7 +231,7 @@ const AUTH = {
         if (!session) return null;
         
         // Super admin sees all
-        if (session.role === 'super_admin') return null;
+        if (session.role === 'admin') return null;
         
         // Others see only their department
         return session.departmentId;
