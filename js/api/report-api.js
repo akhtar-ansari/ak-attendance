@@ -104,8 +104,7 @@ const ReportAPI = {
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, iqama_number, name, date_of_joining, department_id')
-                .eq('client_id', AUTH.getClientId())
-                .order('labor_id');
+                .eq('client_id', AUTH.getClientId());
 
             if (departmentFilter) {
                 laborQuery = laborQuery.eq('department_id', departmentFilter);
@@ -113,6 +112,13 @@ const ReportAPI = {
 
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
+
+            // Natural sort by labor_id (L1, L2, L3... not L1, L10, L11)
+            laborers.sort((a, b) => {
+                const aNum = parseInt(a.labor_id.replace(/\D/g, '')) || 0;
+                const bNum = parseInt(b.labor_id.replace(/\D/g, '')) || 0;
+                return aNum - bNum;
+            });
 
             // Get all attendance records for the month (including first_login, last_logout)
             let attendanceQuery = supabaseClient
