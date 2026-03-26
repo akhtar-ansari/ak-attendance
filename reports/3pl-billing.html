@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AK Attendance - 3PL Billing Report</title>
     <link rel="stylesheet" href="../css/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <style>
         .filters-card {
             background: #f7fafc;
@@ -447,90 +448,176 @@
             `;
         }
 
-        // Export Excel (CSV format)
-        function exportExcel() {
+        /// Export Excel (XLSX format with ExcelJS)
+        async function exportExcel() {
             if (reportData.length === 0) {
                 Toast.error('No data to export. Generate report first.');
                 return;
             }
 
-            const totalDays = reportMeta.totalDays;
-            const monthName = getMonthName(reportMeta.month);
-            
-            // Build header row 1 (day groups)
-            let headerRow1 = ['', '', '', '', ''];
-            for (let day = 1; day <= totalDays; day++) {
-                headerRow1.push(`${getOrdinal(day)} ${monthName}`, '', '');
-            }
-            headerRow1.push('Work Days', 'Half Days', 'Absent', 'Fridays', 'Total Paid');
+            try {
+                SyncIndicator.show('Generating Excel...');
 
-            // Build header row 2 (sub-headers)
-            let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
-            for (let day = 1; day <= totalDays; day++) {
-                headerRow2.push('In', 'Out', 'Status');
-            }
-            headerRow2.push('', '', '', '', '');
+                const totalDays = reportMeta.totalDays;
+                const monthName = getMonthName(reportMeta.month);
 
-            // Build data rows
-            const rows = reportData.map((labor, index) => {
-                let row = [
-                    index + 1,
-                    labor.laborId,
-                    labor.iqamaNumber,
-                    labor.name,
-                    DateUtils.formatDate(labor.dateOfJoining)
-                ];
+                // Create workbook and worksheet
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('3PL Billing');
+
+                // Define colors
+                const colors = {
+                    P: { bg: 'C6F6D5', font: '22543D' },  // Green
+                    H: { bg: 'FEFCBF', font: '975A16' },  // Yellow
+                    A: { bg: 'FED7D7', font: 'C53030' },  // Red
+                    F: { bg: 'E2E8F0', font: '718096' },  // Grey
+                    header: { bg: '667EEA', font: 'FFFFFF' },
+                    subHeader: { bg: '5A67D8', font: 'FFFFFF' },
+                    totalCell: { bg: 'EDF2F7', font: '000000' },
+                    paidCell: { bg: 'C6F6D5', font: '22543D' }
+                };
+
+                // Build header row 1 (day groups)
+                let headerRow1 = ['', '', '', '', ''];
+                for (let day = 1; day <= totalDays; day++) {
+                    headerRow1.push(`${getOrdinal(day)} ${monthName}`, '', '');
+                }
+                headerRow1.push('Work Days', 'Half Days', 'Absent', 'Fridays', 'Total Paid');
+
+                // Build header row 2 (sub-headers)
+                let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
+                for (let day = 1; day <= totalDays; day++) {
+                    headerRow2.push('In', 'Out', 'Status');
+                }
+                headerRow2.push('', '', '', '', '');
+
+                // Add header rows
+                const row1 = worksheet.addRow(headerRow1);
+                const row2 = worksheet.addRow(headerRow2);
+
+                // Style header row 1
+                row1.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.header.bg } };
+                    cell.font = { bold: true, color: { argb: colors.header.font } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                });
+
+                // Style header row 2
+                row2.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.subHeader.bg } };
+                    cell.font = { bold: true, color: { argb: colors.subHeader.font }, size: 9 };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                });
+
+                // Merge header cells for day groups
+                for (let day = 1; day <= totalDays; day++) {
+                    const startCol = 6 + (day - 1) * 3;
+                    worksheet.mergeCells(1, startCol, 1, startCol + 2);
+                }
+                // Merge first 5 columns in row 1
+                worksheet.mergeCells(1, 1, 1, 5);
+
+                // Add data rows
+                reportData.forEach((labor, index) => {
+                    let rowData = [
+                        index + 1,
+                        labor.laborId,
+                        labor.iqamaNumber,
+                        labor.name,
+                        DateUtils.formatDate(labor.dateOfJoining)
+                    ];
+
+                    for (let day = 1; day <= totalDays; day++) {
+                        const dayData = labor.days[day] || { status: 'A', in: '', out: '' };
+                        rowData.push(dayData.in || '', dayData.out || '', dayData.status);
+                    }
+
+                    rowData.push(labor.presentCount, labor.halfDayCount, labor.absentCount, labor.fridayCount, labor.totalPaidDays);
+
+                    const dataRow = worksheet.addRow(rowData);
+
+                    // Style data cells
+                    dataRow.eachCell((cell, colNumber) => {
+                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+                        // Iqama column (3) - format as text
+                        if (colNumber === 3) {
+                            cell.numFmt = '@';
+                        }
+
+                        // Status columns - apply colors
+                        if (colNumber > 5 && colNumber <= 5 + totalDays * 3) {
+                            const colInDay = (colNumber - 6) % 3;
+                            if (colInDay === 2) {
+                                // Status column
+                                const status = cell.value;
+                                if (colors[status]) {
+                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors[status].bg } };
+                                    cell.font = { bold: true, color: { argb: colors[status].font } };
+                                }
+                            }
+                        }
+
+                        // Summary columns (last 5)
+                        const summaryStart = 6 + totalDays * 3;
+                        if (colNumber >= summaryStart && colNumber < summaryStart + 4) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.totalCell.bg } };
+                            cell.font = { bold: true };
+                        }
+
+                        // Total Paid column (last column)
+                        if (colNumber === summaryStart + 4) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.paidCell.bg } };
+                            cell.font = { bold: true, color: { argb: colors.paidCell.font } };
+                        }
+                    });
+                });
+
+                // Set column widths
+                worksheet.getColumn(1).width = 5;   // Sr
+                worksheet.getColumn(2).width = 10;  // Labor ID
+                worksheet.getColumn(3).width = 15;  // Iqama
+                worksheet.getColumn(4).width = 18;  // Name
+                worksheet.getColumn(5).width = 12;  // DOJ
 
                 for (let day = 1; day <= totalDays; day++) {
-                    const dayData = labor.days[day] || { status: 'A', in: '', out: '' };
-                    row.push(dayData.in || '', dayData.out || '', dayData.status);
+                    const startCol = 6 + (day - 1) * 3;
+                    worksheet.getColumn(startCol).width = 10;     // In
+                    worksheet.getColumn(startCol + 1).width = 10; // Out
+                    worksheet.getColumn(startCol + 2).width = 6;  // Status
                 }
 
-                row.push(labor.presentCount, labor.halfDayCount, labor.absentCount, labor.fridayCount, labor.totalPaidDays);
-                return row;
-            });
+                const summaryStart = 6 + totalDays * 3;
+                worksheet.getColumn(summaryStart).width = 10;     // Work Days
+                worksheet.getColumn(summaryStart + 1).width = 10; // Half Days
+                worksheet.getColumn(summaryStart + 2).width = 8;  // Absent
+                worksheet.getColumn(summaryStart + 3).width = 8;  // Fridays
+                worksheet.getColumn(summaryStart + 4).width = 10; // Total Paid
 
-            // Create CSV
-            let csv = '';
-            
-            // Add header rows
-            csv += headerRow1.map(cell => {
-                const str = cell.toString();
-                if (str.includes(',') || str.includes('"')) {
-                    return `"${str.replace(/"/g, '""')}"`;
-                }
-                return str;
-            }).join(',') + '\n';
+                // Freeze first 2 rows and first 5 columns
+                worksheet.views = [{ state: 'frozen', xSplit: 5, ySplit: 2 }];
 
-            csv += headerRow2.map(cell => {
-                const str = cell.toString();
-                if (str.includes(',') || str.includes('"')) {
-                    return `"${str.replace(/"/g, '""')}"`;
-                }
-                return str;
-            }).join(',') + '\n';
+                // Generate file
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `3PL_Billing_${reportMeta.year}_${String(reportMeta.month).padStart(2, '0')}.xlsx`;
+                a.click();
+                URL.revokeObjectURL(url);
 
-            // Add data rows
-            rows.forEach(row => {
-                csv += row.map(cell => {
-                    const str = cell.toString();
-                    if (str.includes(',') || str.includes('"')) {
-                        return `"${str.replace(/"/g, '""')}"`;
-                    }
-                    return str;
-                }).join(',') + '\n';
-            });
+                SyncIndicator.hide();
+                Toast.success('Excel exported!');
 
-            // Download
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `3PL_Billing_${reportMeta.year}_${String(reportMeta.month).padStart(2, '0')}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-
-            Toast.success('Excel exported!');
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Export failed: ' + error.message);
+                console.error('Excel export error:', error);
+            }
         }
 
         // Print report
