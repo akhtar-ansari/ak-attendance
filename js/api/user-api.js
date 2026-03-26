@@ -1,6 +1,6 @@
 // AK Attendance - User API
 const UserAPI = {
-    // Get all users (Super Admin only)
+    // Get all users (Admin only)
     async getAll() {
         try {
             if (!AUTH.hasRole('admin')) {
