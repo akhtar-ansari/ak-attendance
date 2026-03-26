@@ -104,6 +104,12 @@
             color: #38a169;
             margin-top: 3px;
         }
+        .lop-inline {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
         .bulk-actions {
             display: none;
             background: #667eea;
@@ -177,6 +183,14 @@
                     <div class="form-group">
                         <label>Search by Labor ID or Iqama</label>
                         <input type="text" id="laborFilter" class="form-control" placeholder="Leave empty for all laborers">
+                    </div>
+                    <div class="form-group">
+                        <label>LOP Status</label>
+                        <select id="lopFilter" class="form-control">
+                            <option value="">All Records</option>
+                            <option value="pending">Pending Approval</option>
+                            <option value="approved">Approved</option>
+                        </select>
                     </div>
                 </div>
                 <div class="action-buttons" style="margin-top: 15px;">
@@ -425,6 +439,16 @@
                     });
                 }
 
+                // Filter by LOP status
+                const lopFilter = document.getElementById('lopFilter').value;
+                if (lopFilter === 'pending') {
+                    reportData = reportData.filter(r => 
+                        (r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by
+                    );
+                } else if (lopFilter === 'approved') {
+                    reportData = reportData.filter(r => r.approved_by);
+                }
+
                 // Calculate summary
                 const presentCount = reportData.filter(r => r.final_status === 'P').length;
                 const halfDayCount = reportData.filter(r => r.final_status === 'H').length;
@@ -501,13 +525,13 @@
                 if (wasApproved) {
                     // Show approval info + reason button + undo (admin only)
                     lopActionHtml = `
-    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
-        <span class="badge status-P">${record.auto_status} → P</span>
-        <button class="reason-btn" onclick="viewReason('${record.id}')" title="View reason">💬</button>
-        <span style="font-size: 11px; color: #38a169;">by ${record.approved_by}</span>
-        ${isAdmin && !isFrozen ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
-    </div>
-`;
+                        <div class="lop-inline">
+                            <span class="badge status-P">${record.auto_status} → P</span>
+                            <button class="reason-btn" onclick="viewReason('${record.id}')" title="View reason">💬</button>
+                            <span style="font-size: 11px; color: #38a169; white-space: nowrap;">by ${record.approved_by}</span>
+                            ${isAdmin && !isFrozen ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+                        </div>
+                    `;
                 } else if (canApprove) {
                     lopActionHtml = `<button class="approve-btn" onclick="openApproveModal('${record.id}')">✓ Approve</button>`;
                 } else if (isFrozen && (record.auto_status === 'H' || record.auto_status === 'A')) {
