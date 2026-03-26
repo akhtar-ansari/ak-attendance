@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AK Attendance - User Management</title>
+    <title>Attendance - User Management</title>
     <link rel="stylesheet" href="../css/main.css">
 </head>
 <body>
@@ -80,7 +80,7 @@
                 </div>
                 
                 <div class="form-group" id="departmentGroup">
-                    <label>Department * (required for Admin & Supervisor)</label>
+                    <label>Department * <span class="text-muted">(required for Supervisor)</span></label>
                     <select id="userDepartment" class="form-control">
                         <option value="">-- Select Department --</option>
                     </select>
@@ -114,7 +114,7 @@
     <script src="../js/api/department-api.js"></script>
 
     <script>
-        // Require Super Admin
+        // Require Admin
         if (!AUTH.requireRole(['admin'])) {
             // Redirect handled by requireRole
         }
@@ -190,7 +190,7 @@
                     <td><strong>${user.username}</strong></td>
                     <td>${user.name}</td>
                     <td>
-                        <span class="badge badge-info">${roleLabels[user.role] || user.role}</span>
+                        <span class="badge badge-${user.role === 'admin' ? 'success' : 'info'}">${roleLabels[user.role] || user.role}</span>
                     </td>
                     <td>${user.departments ? user.departments.name : '-'}</td>
                     <td>
@@ -216,9 +216,12 @@
             const deptSelect = document.getElementById('userDepartment');
 
             if (role === 'admin') {
+                // Admin doesn't need department - has access to all
                 deptGroup.style.display = 'none';
                 deptSelect.removeAttribute('required');
+                deptSelect.value = '';
             } else {
+                // Supervisor must have department
                 deptGroup.style.display = 'block';
                 deptSelect.setAttribute('required', 'required');
             }
@@ -288,8 +291,9 @@
                 return;
             }
 
-            if (role !== 'admin' && !departmentId) {
-                Toast.error('Please select a department');
+            // Supervisor must have department
+            if (role === 'supervisor' && !departmentId) {
+                Toast.error('Please select a department for Supervisor');
                 return;
             }
 
@@ -304,11 +308,22 @@
 
                 let result;
                 if (editId) {
-                    const updates = { name, role, departmentId, status };
+                    const updates = { name, role, status };
+                    // Only include departmentId for supervisor
+                    if (role === 'supervisor') {
+                        updates.departmentId = departmentId;
+                    } else {
+                        updates.departmentId = null; // Admin has no specific department
+                    }
                     if (password) updates.password = password;
                     result = await UserAPI.update(editId, updates);
                 } else {
-                    result = await UserAPI.create({ username, name, password, role, departmentId, status });
+                    const userData = { username, name, password, role, status };
+                    // Only include departmentId for supervisor
+                    if (role === 'supervisor') {
+                        userData.departmentId = departmentId;
+                    }
+                    result = await UserAPI.create(userData);
                 }
 
                 if (result.success) {
