@@ -200,12 +200,12 @@
 
             departments.forEach(dept => {
                 // For filter - show based on role
-                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                if (session.role === 'admin' || dept.id === session.departmentId) {
                     filterSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
                 }
                 
                 // For form
-                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                if (session.role === 'admin' || dept.id === session.departmentId) {
                     formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
                 }
             });
@@ -274,7 +274,7 @@
             document.getElementById('locStatus').value = 'active';
 
             // Pre-select department for non-super-admin
-            if (session.role !== 'super_admin' && session.departmentId) {
+            if (session.role !== 'admin' && session.departmentId) {
                 document.getElementById('locDepartment').value = session.departmentId;
             } else {
                 document.getElementById('locDepartment').value = '';
