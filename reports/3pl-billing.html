@@ -15,15 +15,16 @@
         .billing-table-container {
             overflow-x: auto;
             margin-top: 20px;
+            max-height: 70vh;
         }
         .billing-table {
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 11px;
             min-width: 100%;
         }
         .billing-table th, .billing-table td {
             border: 1px solid #d0d0d0;
-            padding: 8px 6px;
+            padding: 4px 3px;
             text-align: center;
             white-space: nowrap;
         }
@@ -33,9 +34,15 @@
             font-weight: 600;
             position: sticky;
             top: 0;
+            z-index: 2;
         }
-        .billing-table th.day-header {
-            min-width: 35px;
+        .billing-table th.day-group {
+            min-width: 90px;
+        }
+        .billing-table th.sub-header {
+            background: #5a67d8;
+            font-size: 10px;
+            font-weight: 500;
         }
         .billing-table td.labor-id {
             font-weight: 600;
@@ -47,18 +54,23 @@
         }
         .billing-table td.name-cell {
             text-align: left;
-            max-width: 150px;
+            max-width: 120px;
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .billing-table td.time-cell {
+            font-size: 10px;
+            color: #4a5568;
+        }
+        /* Status colors */
         .billing-table td.status-P {
             background: #c6f6d5;
             color: #22543d;
             font-weight: 600;
         }
         .billing-table td.status-H {
-            background: #fefcbf;
-            color: #975a16;
+            background: #fed7aa;
+            color: #c05621;
             font-weight: 600;
         }
         .billing-table td.status-A {
@@ -69,10 +81,16 @@
         .billing-table td.status-F {
             background: #e2e8f0;
             color: #718096;
+            font-weight: 600;
         }
         .billing-table td.total-cell {
             background: #edf2f7;
             font-weight: 600;
+        }
+        .billing-table td.paid-cell {
+            background: #c6f6d5;
+            font-weight: 700;
+            color: #22543d;
         }
         .billing-table tr:hover td:not(.labor-id) {
             opacity: 0.9;
@@ -101,6 +119,20 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            font-weight: 600;
+            font-size: 11px;
+        }
+        /* Day cell with 3 rows */
+        .day-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .day-cell .time-in, .day-cell .time-out {
+            font-size: 9px;
+            color: #666;
+        }
+        .day-cell .status {
             font-weight: 600;
             font-size: 11px;
         }
@@ -163,7 +195,7 @@
                     <span>Present</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color" style="background: #fefcbf; color: #975a16;">H</div>
+                    <div class="legend-color" style="background: #fed7aa; color: #c05621;">H</div>
                     <span>Half Day</span>
                 </div>
                 <div class="legend-item">
@@ -171,7 +203,7 @@
                     <span>Absent</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color" style="background: #e2e8f0; color: #718096;">-</div>
+                    <div class="legend-color" style="background: #e2e8f0; color: #718096;">F</div>
                     <span>Friday (Holiday)</span>
                 </div>
             </div>
@@ -208,6 +240,20 @@
         let reportData = [];
         let reportMeta = {};
 
+        // Get ordinal suffix for day
+        function getOrdinal(n) {
+            const s = ['th', 'st', 'nd', 'rd'];
+            const v = n % 100;
+            return n + (s[(v - 20) % 10] || s[v] || s[0]);
+        }
+
+        // Get month name
+        function getMonthName(month) {
+            const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[month];
+        }
+
         // Initialize year dropdown
         function initYearDropdown() {
             const yearSelect = document.getElementById('yearSelect');
@@ -234,7 +280,7 @@
                     select.innerHTML = '<option value="">All Departments</option>';
                     
                     departments.forEach(dept => {
-                        if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                        if (session.role === 'admin' || dept.id === session.departmentId) {
                             select.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
                         }
                     });
@@ -287,28 +333,41 @@
             }
 
             const totalDays = reportMeta.totalDays;
+            const monthName = getMonthName(reportMeta.month);
 
-            // Build header
-            let headerHtml = `
+            // Build header row 1 (day groups)
+            let headerRow1 = `
                 <tr>
-                    <th>Sr</th>
-                    <th>Labor ID</th>
-                    <th>Iqama</th>
-                    <th>Name</th>
-                    <th>DOJ</th>
+                    <th rowspan="2">Sr</th>
+                    <th rowspan="2">Labor ID</th>
+                    <th rowspan="2">Iqama</th>
+                    <th rowspan="2">Name</th>
+                    <th rowspan="2">DOJ</th>
             `;
 
             for (let day = 1; day <= totalDays; day++) {
-                headerHtml += `<th class="day-header">${day}</th>`;
+                headerRow1 += `<th colspan="3" class="day-group">${getOrdinal(day)} ${monthName}</th>`;
             }
 
-            headerHtml += `
-                    <th>Work Days</th>
-                    <th>Half Days</th>
-                    <th>Absent</th>
-                    <th>Fridays</th>
+            headerRow1 += `
+                    <th rowspan="2">Work Days</th>
+                    <th rowspan="2">Half Days</th>
+                    <th rowspan="2">Absent</th>
+                    <th rowspan="2">Fridays</th>
+                    <th rowspan="2">Total Paid</th>
                 </tr>
             `;
+
+            // Build header row 2 (In/Out/Status sub-headers)
+            let headerRow2 = '<tr>';
+            for (let day = 1; day <= totalDays; day++) {
+                headerRow2 += `
+                    <th class="sub-header">In</th>
+                    <th class="sub-header">Out</th>
+                    <th class="sub-header">Status</th>
+                `;
+            }
+            headerRow2 += '</tr>';
 
             // Build body
             let bodyHtml = '';
@@ -316,6 +375,7 @@
             let totalHalfDay = 0;
             let totalAbsent = 0;
             let totalFridays = 0;
+            let grandTotalPaid = 0;
 
             reportData.forEach((labor, index) => {
                 bodyHtml += `
@@ -328,15 +388,20 @@
                 `;
 
                 for (let day = 1; day <= totalDays; day++) {
-                    const status = labor.days[day] || '-';
-                    let cellClass = '';
+                    const dayData = labor.days[day] || { status: 'A', in: '', out: '' };
+                    const status = dayData.status;
+                    let statusClass = '';
                     
-                    if (status === 'P') cellClass = 'status-P';
-                    else if (status === 'H') cellClass = 'status-H';
-                    else if (status === 'A') cellClass = 'status-A';
-                    else if (status === '-') cellClass = 'status-F';
+                    if (status === 'P') statusClass = 'status-P';
+                    else if (status === 'H') statusClass = 'status-H';
+                    else if (status === 'A') statusClass = 'status-A';
+                    else if (status === 'F') statusClass = 'status-F';
 
-                    bodyHtml += `<td class="${cellClass}">${status}</td>`;
+                    bodyHtml += `
+                        <td class="time-cell">${dayData.in || '-'}</td>
+                        <td class="time-cell">${dayData.out || '-'}</td>
+                        <td class="${statusClass}">${status}</td>
+                    `;
                 }
 
                 bodyHtml += `
@@ -344,6 +409,7 @@
                         <td class="total-cell">${labor.halfDayCount}</td>
                         <td class="total-cell">${labor.absentCount}</td>
                         <td class="total-cell">${labor.fridayCount}</td>
+                        <td class="paid-cell">${labor.totalPaidDays}</td>
                     </tr>
                 `;
 
@@ -351,6 +417,7 @@
                 totalHalfDay += labor.halfDayCount;
                 totalAbsent += labor.absentCount;
                 totalFridays += labor.fridayCount;
+                grandTotalPaid += labor.totalPaidDays;
             });
 
             // Summary row
@@ -360,7 +427,7 @@
             `;
 
             for (let day = 1; day <= totalDays; day++) {
-                bodyHtml += `<td></td>`;
+                bodyHtml += `<td></td><td></td><td></td>`;
             }
 
             bodyHtml += `
@@ -368,12 +435,13 @@
                     <td>${totalHalfDay}</td>
                     <td>${totalAbsent}</td>
                     <td>${totalFridays}</td>
+                    <td>${grandTotalPaid}</td>
                 </tr>
             `;
 
             container.innerHTML = `
                 <table class="billing-table">
-                    <thead>${headerHtml}</thead>
+                    <thead>${headerRow1}${headerRow2}</thead>
                     <tbody>${bodyHtml}</tbody>
                 </table>
             `;
@@ -387,15 +455,23 @@
             }
 
             const totalDays = reportMeta.totalDays;
+            const monthName = getMonthName(reportMeta.month);
             
-            // Build header
-            let headers = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
+            // Build header row 1 (day groups)
+            let headerRow1 = ['', '', '', '', ''];
             for (let day = 1; day <= totalDays; day++) {
-                headers.push(day.toString());
+                headerRow1.push(`${getOrdinal(day)} ${monthName}`, '', '');
             }
-            headers.push('Work Days', 'Half Days', 'Absent', 'Fridays');
+            headerRow1.push('Work Days', 'Half Days', 'Absent', 'Fridays', 'Total Paid');
 
-            // Build rows
+            // Build header row 2 (sub-headers)
+            let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
+            for (let day = 1; day <= totalDays; day++) {
+                headerRow2.push('In', 'Out', 'Status');
+            }
+            headerRow2.push('', '', '', '', '');
+
+            // Build data rows
             const rows = reportData.map((labor, index) => {
                 let row = [
                     index + 1,
@@ -406,15 +482,35 @@
                 ];
 
                 for (let day = 1; day <= totalDays; day++) {
-                    row.push(labor.days[day] || '-');
+                    const dayData = labor.days[day] || { status: 'A', in: '', out: '' };
+                    row.push(dayData.in || '', dayData.out || '', dayData.status);
                 }
 
-                row.push(labor.presentCount, labor.halfDayCount, labor.absentCount, labor.fridayCount);
+                row.push(labor.presentCount, labor.halfDayCount, labor.absentCount, labor.fridayCount, labor.totalPaidDays);
                 return row;
             });
 
             // Create CSV
-            let csv = headers.join(',') + '\n';
+            let csv = '';
+            
+            // Add header rows
+            csv += headerRow1.map(cell => {
+                const str = cell.toString();
+                if (str.includes(',') || str.includes('"')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            }).join(',') + '\n';
+
+            csv += headerRow2.map(cell => {
+                const str = cell.toString();
+                if (str.includes(',') || str.includes('"')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            }).join(',') + '\n';
+
+            // Add data rows
             rows.forEach(row => {
                 csv += row.map(cell => {
                     const str = cell.toString();
@@ -453,24 +549,27 @@
                 <head>
                     <title>3PL Billing Report</title>
                     <style>
-                        body { font-family: Arial, sans-serif; font-size: 10px; }
+                        body { font-family: Arial, sans-serif; font-size: 8px; }
                         table { border-collapse: collapse; width: 100%; }
-                        th, td { border: 1px solid #333; padding: 4px; text-align: center; }
-                        th { background: #667eea; color: white; }
+                        th, td { border: 1px solid #333; padding: 2px; text-align: center; }
+                        th { background: #667eea; color: white; font-size: 7px; }
+                        .sub-header { background: #5a67d8; }
                         .status-P { background: #c6f6d5; }
-                        .status-H { background: #fefcbf; }
+                        .status-H { background: #fed7aa; }
                         .status-A { background: #fed7d7; }
                         .status-F { background: #e2e8f0; }
                         .total-cell { background: #edf2f7; font-weight: bold; }
+                        .paid-cell { background: #c6f6d5; font-weight: bold; }
                         .summary-row td { background: #667eea !important; color: white !important; }
                         .labor-id, .name-cell { text-align: left; }
+                        .time-cell { font-size: 7px; }
                         @media print {
-                            @page { size: landscape; margin: 0.5cm; }
+                            @page { size: landscape; margin: 0.3cm; }
                         }
                     </style>
                 </head>
                 <body>
-                    <h2 style="text-align: center;">3PL Monthly Billing Report - ${reportMeta.month}/${reportMeta.year}</h2>
+                    <h2 style="text-align: center; font-size: 12px;">3PL Monthly Billing Report - ${getMonthName(reportMeta.month)} ${reportMeta.year}</h2>
                     ${printContent}
                 </body>
                 </html>
