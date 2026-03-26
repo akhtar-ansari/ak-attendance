@@ -107,15 +107,15 @@
         }
 
         const session = AUTH.getSession();
+        const isAdmin = session.role === 'admin';
 
         // Set user info
         document.getElementById('userName').textContent = session.name;
-        document.getElementById('userInfo').textContent = `${session.name} (${session.role.replace('_', ' ').toUpperCase()})`;
+        document.getElementById('userInfo').textContent = `${session.name} (${isAdmin ? 'ADMIN' : 'SUPERVISOR'})`;
         
         const roleLabels = {
-            'super_admin': 'Super Administrator - Full Access',
-            'admin': 'Department Administrator',
-            'supervisor': 'Warehouse Supervisor'
+            'admin': 'Administrator - Full Access',
+            'supervisor': 'Supervisor - Department Access'
         };
         document.getElementById('roleInfo').textContent = roleLabels[session.role] || session.role;
 
@@ -123,38 +123,30 @@
         function renderNavigationTiles() {
             const tiles = [];
 
-            // Super Admin sees all
-            if (session.role === 'super_admin') {
+            // Admin only tiles
+            if (isAdmin) {
                 tiles.push(
                     { title: 'Departments', desc: 'Manage departments', icon: '🏛️', link: 'admin/departments.html', class: 'tile-purple' },
-                    { title: 'Users', desc: 'Manage users', icon: '👤', link: 'admin/users.html', class: 'tile-pink' }
+                    { title: 'Users', desc: 'Manage users', icon: '👤', link: 'admin/users.html', class: 'tile-pink' },
+                    { title: 'Punch Locations', desc: 'Manage locations', icon: '📍', link: 'attendance/punch-locations.html', class: 'tile-red' },
+                    { title: 'Settings', desc: 'System settings', icon: '⚙️', link: 'admin/settings.html', class: 'tile-teal' }
                 );
             }
 
-            // Admin and Super Admin
-            if (session.role === 'super_admin' || session.role === 'admin') {
-                tiles.push(
-                    { title: 'Labor Master', desc: 'Manage laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
-                    { title: 'LOP Approvals', desc: 'Approve/reject LOP', icon: '✅', link: 'attendance/lop.html', class: 'tile-orange' }
-                );
-            }
-
-            // Supervisor
-            if (session.role === 'supervisor') {
-                tiles.push(
-                    { title: 'Labor Master', desc: 'View laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
-                    { title: 'LOP Requests', desc: 'Request LOP approval', icon: '📝', link: 'attendance/lop.html', class: 'tile-orange' }
-                );
-            }
-
-            // Common tiles for all roles
+            // Common tiles for Admin and Supervisor
             tiles.push(
-                { title: 'Reports', desc: 'View attendance', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
-                { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
-                { title: 'Punch Locations', desc: 'Manage locations', icon: '📍', link: 'attendance/punch-locations.html', class: 'tile-red' },
-                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: `punch/index.html?client=${session.clientCode}`, class: 'tile-orange', target: '_blank' },
-                { title: 'Settings', desc: 'System settings', icon: '⚙️', link: 'admin/settings.html', class: 'tile-teal' }
+                { title: 'Labor Master', desc: isAdmin ? 'Manage laborers' : 'View laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
+                { title: 'Reports', desc: 'Attendance & LOP', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
+                { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: `punch/index.html?client=${session.clientCode}`, class: 'tile-orange', target: '_blank' }
             );
+
+            // Admin only - 3PL Billing
+            if (isAdmin) {
+                tiles.push(
+                    { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' }
+                );
+            }
+
             const container = document.getElementById('navigationTiles');
             container.innerHTML = tiles.map(tile => `
                 <div class="dashboard-tile ${tile.class}" onclick="${tile.target ? `window.open('${tile.link}', '_blank')` : `location.href='${tile.link}'`}">
@@ -238,9 +230,14 @@
             
             let actions = [];
             
-            if (session.role === 'super_admin' || session.role === 'admin') {
+            // Admin and Supervisor can add laborers (filtered by their department)
+            actions.push(
+                `<button class="btn btn-primary" onclick="location.href='labor/master.html'">➕ Add New Labor</button>`
+            );
+            
+            // Admin only - Import
+            if (isAdmin) {
                 actions.push(
-                    `<button class="btn btn-primary" onclick="location.href='labor/master.html'">➕ Add New Labor</button>`,
                     `<button class="btn btn-success" onclick="location.href='labor/import.html'">📤 Import Laborers</button>`
                 );
             }
@@ -250,61 +247,51 @@
                 `<button class="btn btn-warning" onclick="window.open('punch/index.html?client=${session.clientCode}', '_blank')">👆 Open Punch Terminal</button>`
             );
 
-            if (actions.length > 0) {
-                container.innerHTML = `
-                    <h3>⚡ Quick Actions</h3>
-                    <div class="action-buttons">
-                        ${actions.join('')}
-                    </div>
-                `;
-            }
+            container.innerHTML = `
+                <h3>⚡ Quick Actions</h3>
+                <div class="action-buttons">
+                    ${actions.join('')}
+                </div>
+            `;
         }
 
         // Initialize
-renderNavigationTiles();
-renderQuickActions();
-loadStats();
-checkPhotoCleanup();
+        renderNavigationTiles();
+        renderQuickActions();
+        loadStats();
+        checkPhotoCleanup();
 
-// Check and run photo cleanup if 15 days passed
-async function checkPhotoCleanup() {
-    try {
-        const { data } = await supabaseClient
-            .from('settings')
-            .select('value')
-            .eq('key', 'last_photo_cleanup')
-            .single();
-
-        const lastCleanup = new Date(data?.value || '2025-01-01');
-        const today = new Date();
-        const daysDiff = Math.floor((today - lastCleanup) / (1000 * 60 * 60 * 24));
-
-        if (daysDiff >= 15) {
-            console.log('Running photo cleanup...');
-            const result = await PunchAPI.cleanupOldPhotos();
-            
-            if (result.success) {
-                console.log(`Photo cleanup done. Cleaned: ${result.cleaned}`);
-                
-                // Update last cleanup date
-                await supabaseClient
+        // Check and run photo cleanup if 15 days passed
+        async function checkPhotoCleanup() {
+            try {
+                const { data } = await supabaseClient
                     .from('settings')
-                    .update({ value: today.toISOString().split('T')[0] })
-                    .eq('key', 'last_photo_cleanup');
+                    .select('value')
+                    .eq('key', 'last_photo_cleanup')
+                    .single();
+
+                const lastCleanup = new Date(data?.value || '2025-01-01');
+                const today = new Date();
+                const daysDiff = Math.floor((today - lastCleanup) / (1000 * 60 * 60 * 24));
+
+                if (daysDiff >= 15) {
+                    console.log('Running photo cleanup...');
+                    const result = await PunchAPI.cleanupOldPhotos();
+                    
+                    if (result.success) {
+                        console.log(`Photo cleanup done. Cleaned: ${result.cleaned}`);
+                        
+                        // Update last cleanup date
+                        await supabaseClient
+                            .from('settings')
+                            .update({ value: today.toISOString().split('T')[0] })
+                            .eq('key', 'last_photo_cleanup');
+                    }
+                }
+            } catch (error) {
+                console.error('Photo cleanup check error:', error);
             }
         }
-    } catch (error) {
-        console.error('Photo cleanup check error:', error);
-    }
-}
     </script>
 </body>
-
 </html>
-
-
-
-
-
-
-
