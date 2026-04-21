@@ -220,9 +220,9 @@ function checkPermissions() {
             const filterSelect = document.getElementById('departmentFilter');
             const formSelect = document.getElementById('laborDepartment');
 
-            // Filter dropdown - show all for super admin
+            // Filter dropdown - show all for admin
             filterSelect.innerHTML = '<option value="">All Departments</option>';
-            if (session.role === 'super_admin') {
+            if (session.role === 'admin') {
                 departments.forEach(dept => {
                     filterSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
                 });
@@ -232,13 +232,13 @@ function checkPermissions() {
             formSelect.innerHTML = '<option value="">-- Select Department --</option>';
             departments.forEach(dept => {
                 // For non-super-admin, only show their department
-                if (session.role === 'super_admin' || dept.id === session.departmentId) {
+                if (session.role === 'admin' || dept.id === session.departmentId) {
                     formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
                 }
             });
 
-            // Pre-select department for non-super-admin
-            if (session.role !== 'super_admin' && session.departmentId) {
+            // Pre-select department for non-admin
+            if (session.role !== 'admin' && session.departmentId) {
                 formSelect.value = session.departmentId;
             }
         }
@@ -365,7 +365,7 @@ function checkPermissions() {
             document.getElementById('laborStatus').value = 'active';
             
             // Pre-select department for non-super-admin
-            if (session.role !== 'super_admin' && session.departmentId) {
+            if (session.role !== 'admin' && session.departmentId) {
                 document.getElementById('laborDepartment').value = session.departmentId;
             } else {
                 document.getElementById('laborDepartment').value = '';
