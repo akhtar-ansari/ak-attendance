@@ -26,6 +26,16 @@
             border-radius: 8px;
             font-size: 14px;
         }
+        .role-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .role-badge.labor { background: #e2e8f0; color: #4a5568; }
+        .role-badge.team_leader { background: #fef3c7; color: #92400e; }
+        .salary-cell { font-weight: 600; color: #2d3748; }
     </style>
 </head>
 <body>
@@ -49,7 +59,7 @@
                 </select>
                 <select id="statusFilter" onchange="applyFilters()">
                     <option value="">All Status</option>
-                    <option value="active">Active</option>
+                    <option value="active" selected>Active</option>
                     <option value="inactive">Inactive</option>
                 </select>
                 <select id="faceFilter" onchange="applyFilters()">
@@ -70,21 +80,23 @@
                 <table>
                     <thead>
                         <tr>
-    <th>Labor ID</th>
-    <th>Name</th>
-    <th>Iqama</th>
-    <th>Date of Joining</th>
-    <th>Nationality</th>
-    <th>Department</th>
-    <th>Status</th>
-    <th>Face</th>
-    <th>Last Sync</th>
-    <th>Actions</th>
-</tr>
+                            <th>Labor ID</th>
+                            <th>Name</th>
+                            <th>Iqama</th>
+                            <th>DOJ</th>
+                            <th>Nationality</th>
+                            <th>Department</th>
+                            <th>Role</th>
+                            <th>Salary</th>
+                            <th>Status</th>
+                            <th>Face</th>
+                            <th>Last Sync</th>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody id="laborTable">
                         <tr>
-                            <td colspan="9" class="text-center p-20">Loading...</td>
+                            <td colspan="12" class="text-center p-20">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -131,6 +143,19 @@
                     </div>
                     
                     <div class="form-group">
+                        <label>Role *</label>
+                        <select id="laborRole" class="form-control" onchange="onRoleChange()" required>
+                            <option value="labor">Labor</option>
+                            <option value="team_leader">Team Leader</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Monthly Salary (SAR) *</label>
+                        <input type="number" id="laborSalary" class="form-control" value="3000" min="0" step="100" required>
+                    </div>
+                    
+                    <div class="form-group">
                         <label>Status</label>
                         <select id="laborStatus" class="form-control">
                             <option value="active">Active</option>
@@ -142,6 +167,30 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="saveLabor()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mark Inactive Modal -->
+    <div class="modal-overlay" id="inactiveModal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>⚠️ Mark Labor Inactive</h2>
+                <button type="button" class="modal-close" onclick="closeInactiveModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="inactiveLaborId">
+                <p id="inactiveLaborName" style="font-weight: 600; margin-bottom: 15px;"></p>
+                
+                <div class="form-group">
+                    <label>Last Working Date *</label>
+                    <input type="date" id="lastWorkingDate" class="form-control" required>
+                    <small style="color: #666;">Labor will be marked Absent from the next day onwards in current month's report.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeInactiveModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmMarkInactive()">🚫 Mark Inactive</button>
             </div>
         </div>
     </div>
@@ -170,13 +219,25 @@
         let departments = [];
         let filteredLaborers = [];
 
+        // Role to salary mapping
+        const roleSalaryMap = {
+            'labor': 3000,
+            'team_leader': 3800
+        };
+
+        // On role change - auto-fill salary
+        function onRoleChange() {
+            const role = document.getElementById('laborRole').value;
+            document.getElementById('laborSalary').value = roleSalaryMap[role] || 3000;
+        }
+
         // Check permissions for add/import
-function checkPermissions() {
-    // Supervisors can add but not import
-    if (session.role === 'supervisor') {
-        document.getElementById('importBtn').style.display = 'none';
-    }
-}
+        function checkPermissions() {
+            // Supervisors can add but not import
+            if (session.role === 'supervisor') {
+                document.getElementById('importBtn').style.display = 'none';
+            }
+        }
 
         // Load data
         async function loadData() {
@@ -199,7 +260,7 @@ function checkPermissions() {
                         return numA - numB;
                     });
                     filteredLaborers = [...laborers];
-                    renderTable();
+                    applyFilters(); // Apply default filter (Active)
                 } else {
                     throw new Error(laborResult.error);
                 }
@@ -208,7 +269,7 @@ function checkPermissions() {
                 SyncIndicator.hide();
                 Toast.error('Failed to load data: ' + error.message);
                 document.getElementById('laborTable').innerHTML = `
-                    <tr><td colspan="9" class="text-center p-20 text-danger">
+                    <tr><td colspan="12" class="text-center p-20 text-danger">
                         ❌ Failed to load. Check internet connection.
                     </td></tr>
                 `;
@@ -231,7 +292,7 @@ function checkPermissions() {
             // Form dropdown
             formSelect.innerHTML = '<option value="">-- Select Department --</option>';
             departments.forEach(dept => {
-                // For non-super-admin, only show their department
+                // For non-admin, only show their department
                 if (session.role === 'admin' || dept.id === session.departmentId) {
                     formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
                 }
@@ -275,13 +336,19 @@ function checkPermissions() {
             renderTable();
         }
 
+        // Format role for display
+        function formatRole(role) {
+            if (role === 'team_leader') return '<span class="role-badge team_leader">Team Leader</span>';
+            return '<span class="role-badge labor">Labor</span>';
+        }
+
         // Render table
         function renderTable() {
             const tbody = document.getElementById('laborTable');
 
             if (filteredLaborers.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="10" class="text-center p-20 text-muted">
+                    <tr><td colspan="12" class="text-center p-20 text-muted">
                         No laborers found. ${session.role !== 'supervisor' ? 'Click "Add Labor" to create one.' : ''}
                     </td></tr>
                 `;
@@ -304,17 +371,23 @@ function checkPermissions() {
                 
                 // Enroll/Re-enroll button
                 if (!labor.face_enrolled || labor.needs_reenrollment) {
-                    actions += `<button class="btn btn-sm btn-success" onclick="enrollFace('${labor.labor_id}')">📸 Enroll</button> `;
+                    actions += `<button class="btn btn-sm btn-success" onclick="enrollFace('${labor.labor_id}')" title="Enroll Face">📸</button> `;
                 } else {
-                    actions += `<button class="btn btn-sm btn-warning" onclick="enrollFace('${labor.labor_id}')">🔄 Re-enroll</button> `;
+                    actions += `<button class="btn btn-sm btn-warning" onclick="enrollFace('${labor.labor_id}')" title="Re-enroll Face">🔄</button> `;
                 }
 
-                // Edit/Delete for admin/super_admin
+                // Edit/Delete/Reactivate for admin
                 if (session.role !== 'supervisor') {
-                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️</button> `;
-                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️</button>`;
+                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')" title="Edit">✏️</button> `;
+                    
+                    if (labor.status === 'active') {
+                        actions += `<button class="btn btn-sm btn-danger" onclick="showInactiveModal('${labor.labor_id}')" title="Mark Inactive">🚫</button>`;
+                    } else {
+                        actions += `<button class="btn btn-sm btn-success" onclick="reactivateLabor('${labor.labor_id}')" title="Reactivate">✅</button>`;
+                    }
                 }
-// Sync status
+
+                // Sync status
                 let syncHtml = '-';
                 if (labor.last_sync_at) {
                     const syncDate = new Date(labor.last_sync_at);
@@ -332,7 +405,14 @@ function checkPermissions() {
                         ${syncDate.toLocaleDateString()}
                     </span>`;
                 }
-                    return `
+
+                // Last working date info
+                let statusHtml = `<span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">${labor.status}</span>`;
+                if (labor.last_working_date && labor.status === 'inactive') {
+                    statusHtml += `<br><small style="color:#718096;">LWD: ${DateUtils.formatDate(labor.last_working_date)}</small>`;
+                }
+
+                return `
                     <tr>
                         <td><strong>${labor.labor_id}</strong></td>
                         <td>${labor.name}</td>
@@ -340,11 +420,9 @@ function checkPermissions() {
                         <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
                         <td>${labor.nationality}</td>
                         <td>${labor.departments?.name || '-'}</td>
-                        <td>
-                            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
-                                ${labor.status}
-                            </span>
-                        </td>
+                        <td>${formatRole(labor.role)}</td>
+                        <td class="salary-cell">${(labor.monthly_salary || 3000).toLocaleString()}</td>
+                        <td>${statusHtml}</td>
                         <td>${faceHtml}</td>
                         <td>${syncHtml}</td>
                         <td>${actions}</td>
@@ -362,9 +440,11 @@ function checkPermissions() {
             document.getElementById('laborIqama').disabled = false;
             document.getElementById('laborDOJ').value = '';
             document.getElementById('laborNationality').value = '';
+            document.getElementById('laborRole').value = 'labor';
+            document.getElementById('laborSalary').value = 3000;
             document.getElementById('laborStatus').value = 'active';
             
-            // Pre-select department for non-super-admin
+            // Pre-select department for non-admin
             if (session.role !== 'admin' && session.departmentId) {
                 document.getElementById('laborDepartment').value = session.departmentId;
             } else {
@@ -387,6 +467,8 @@ function checkPermissions() {
             document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
             document.getElementById('laborNationality').value = labor.nationality;
             document.getElementById('laborDepartment').value = labor.department_id;
+            document.getElementById('laborRole').value = labor.role || 'labor';
+            document.getElementById('laborSalary').value = labor.monthly_salary || 3000;
             document.getElementById('laborStatus').value = labor.status;
 
             document.getElementById('laborModal').classList.add('active');
@@ -405,6 +487,8 @@ function checkPermissions() {
             const dateOfJoining = document.getElementById('laborDOJ').value;
             const nationality = document.getElementById('laborNationality').value.trim();
             const departmentId = document.getElementById('laborDepartment').value;
+            const role = document.getElementById('laborRole').value;
+            const monthlySalary = parseFloat(document.getElementById('laborSalary').value) || 3000;
             const status = document.getElementById('laborStatus').value;
 
             // Validation
@@ -423,6 +507,8 @@ function checkPermissions() {
                         dateOfJoining,
                         nationality,
                         departmentId,
+                        role,
+                        monthlySalary,
                         status
                     });
                 } else {
@@ -432,6 +518,8 @@ function checkPermissions() {
                         dateOfJoining,
                         nationality,
                         departmentId,
+                        role,
+                        monthlySalary,
                         status
                     });
                 }
@@ -451,30 +539,109 @@ function checkPermissions() {
             }
         }
 
-        // Delete labor
-        async function deleteLabor(laborId) {
+        // Show inactive modal
+        function showInactiveModal(laborId) {
             const labor = laborers.find(l => l.labor_id === laborId);
-            
-            if (!confirm(`Delete labor "${labor.name}" (${laborId})?\n\nThis will set the labor as inactive.`)) {
+            if (!labor) return;
+
+            document.getElementById('inactiveLaborId').value = laborId;
+            document.getElementById('inactiveLaborName').textContent = `${labor.name} (${laborId})`;
+            document.getElementById('lastWorkingDate').value = DateUtils.today();
+            document.getElementById('lastWorkingDate').max = DateUtils.today();
+
+            document.getElementById('inactiveModal').classList.add('active');
+        }
+
+        // Close inactive modal
+        function closeInactiveModal() {
+            document.getElementById('inactiveModal').classList.remove('active');
+        }
+
+        // Confirm mark inactive
+        async function confirmMarkInactive() {
+            const laborId = document.getElementById('inactiveLaborId').value;
+            const lastWorkingDate = document.getElementById('lastWorkingDate').value;
+
+            if (!lastWorkingDate) {
+                Toast.error('Please select last working date');
                 return;
             }
 
             try {
-                SyncIndicator.show('Deleting...');
+                SyncIndicator.show('Validating...');
 
-                const result = await LaborAPI.delete(laborId, false); // Soft delete
+                // Check if labor has punches after the selected date
+                const { data: punches, error: punchError } = await supabaseClient
+                    .from('punch_records')
+                    .select('date')
+                    .eq('labor_id', laborId)
+                    .eq('client_id', AUTH.getClientId())
+                    .gt('date', lastWorkingDate)
+                    .order('date', { ascending: false })
+                    .limit(1);
 
-                if (result.success) {
-                    Toast.success('Labor deleted!');
-                    loadData();
-                } else {
-                    throw new Error(result.error);
+                if (punchError) throw punchError;
+
+                if (punches && punches.length > 0) {
+                    SyncIndicator.hide();
+                    Toast.error(`Labor can't be marked inactive. Last punch was on ${DateUtils.formatDate(punches[0].date)}`);
+                    return;
                 }
 
+                // Mark as inactive
+                SyncIndicator.show('Marking inactive...');
+
+                const { error: updateError } = await supabaseClient
+                    .from('laborers')
+                    .update({ 
+                        status: 'inactive',
+                        last_working_date: lastWorkingDate
+                    })
+                    .eq('labor_id', laborId)
+                    .eq('client_id', AUTH.getClientId());
+
+                if (updateError) throw updateError;
+
                 SyncIndicator.hide();
+                Toast.success('Labor marked as inactive!');
+                closeInactiveModal();
+                loadData();
+
             } catch (error) {
                 SyncIndicator.hide();
-                Toast.error('Failed to delete: ' + error.message);
+                Toast.error('Failed: ' + error.message);
+            }
+        }
+
+        // Reactivate labor
+        async function reactivateLabor(laborId) {
+            const labor = laborers.find(l => l.labor_id === laborId);
+            
+            if (!confirm(`Reactivate "${labor.name}" (${laborId})?\n\nThis will set status to Active and clear the last working date.`)) {
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Reactivating...');
+
+                const { error } = await supabaseClient
+                    .from('laborers')
+                    .update({ 
+                        status: 'active',
+                        last_working_date: null
+                    })
+                    .eq('labor_id', laborId)
+                    .eq('client_id', AUTH.getClientId());
+
+                if (error) throw error;
+
+                SyncIndicator.hide();
+                Toast.success('Labor reactivated!');
+                loadData();
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to reactivate: ' + error.message);
             }
         }
 
@@ -497,7 +664,10 @@ function checkPermissions() {
                 'Date of Joining': DateUtils.formatDate(l.date_of_joining),
                 'Nationality': l.nationality,
                 'Department': l.departments?.name || '',
+                'Role': l.role || 'labor',
+                'Monthly Salary': l.monthly_salary || 3000,
                 'Status': l.status,
+                'Last Working Date': l.last_working_date ? DateUtils.formatDate(l.last_working_date) : '',
                 'Face Enrolled': l.face_enrolled ? 'Yes' : 'No'
             }));
 
@@ -510,8 +680,4 @@ function checkPermissions() {
         loadData();
     </script>
 </body>
-
 </html>
-
-
-
