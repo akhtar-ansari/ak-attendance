@@ -143,12 +143,9 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Role *</label>
-                        <select id="laborRole" class="form-control" onchange="onRoleChange()" required>
-                            <option value="labor">Labor</option>
-                            <option value="team_leader">Team Leader</option>
-                        </select>
-                    </div>
+    <label>Role *</label>
+    <input type="text" id="laborRole" class="form-control" placeholder="e.g., Labor, Team Leader, Supervisor" value="Labor" required>
+</div>
                     
                     <div class="form-group">
                         <label>Monthly Salary (SAR) *</label>
@@ -218,18 +215,6 @@
         let laborers = [];
         let departments = [];
         let filteredLaborers = [];
-
-        // Role to salary mapping
-        const roleSalaryMap = {
-            'labor': 3000,
-            'team_leader': 3800
-        };
-
-        // On role change - auto-fill salary
-        function onRoleChange() {
-            const role = document.getElementById('laborRole').value;
-            document.getElementById('laborSalary').value = roleSalaryMap[role] || 3000;
-        }
 
         // Check permissions for add/import
         function checkPermissions() {
