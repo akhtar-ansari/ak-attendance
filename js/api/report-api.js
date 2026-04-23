@@ -1,4 +1,4 @@
-// AK Attendance - Report API v2 (with In/Out times for 3PL Billing)
+// AK Attendance - Report API v3 (with Hours, Min Hours Logic, Salary Calculation)
 const ReportAPI = {
     // Get daily attendance summary
     async getDailyAttendance(fromDate, toDate, departmentId = null) {
@@ -90,8 +90,56 @@ const ReportAPI = {
         }
     },
 
+    // Parse time string to minutes
+    parseTimeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+        try {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        } catch {
+            return 0;
+        }
+    },
+
+    // Format minutes to HH:MM
+    formatMinutesToHHMM(minutes) {
+        if (!minutes || minutes <= 0) return '';
+        const h = Math.floor(minutes / 60);
+        const m = Math.round(minutes % 60);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    },
+
+    // Calculate hours between two time strings
+    calculateHours(firstIn, lastOut) {
+        if (!firstIn || !lastOut) return 0;
+        try {
+            const inMinutes = this.parseTimeToMinutes(firstIn);
+            const outMinutes = this.parseTimeToMinutes(lastOut);
+            if (outMinutes <= inMinutes) return 0;
+            return outMinutes - inMinutes;
+        } catch {
+            return 0;
+        }
+    },
+
+    // Determine status based on worked hours and min hours
+    determineStatus(workedMinutes, minHoursFullDay) {
+        if (!workedMinutes || workedMinutes <= 0) return 'A';
+        
+        const fullDayMinutes = this.parseTimeToMinutes(minHoursFullDay || '09:30');
+        const halfDayMinutes = fullDayMinutes / 2;
+
+        if (workedMinutes >= fullDayMinutes) {
+            return 'P';
+        } else if (workedMinutes >= halfDayMinutes) {
+            return 'H';
+        } else {
+            return 'A';
+        }
+    },
+
     // Get monthly summary for 3PL billing
-    async getMonthlyBilling(year, month, departmentId = null) {
+    async getMonthlyBilling(year, month, departmentId = null, statusFilter = 'active') {
         try {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
             
@@ -100,15 +148,39 @@ const ReportAPI = {
             const lastDay = new Date(year, month, 0).getDate();
             const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
-            // Get all laborers for the department
+            // Get departments with min_hours_full_day
+            const { data: deptData, error: deptError } = await supabaseClient
+                .from('departments')
+                .select('id, min_hours_full_day')
+                .eq('client_id', AUTH.getClientId());
+            
+            if (deptError) throw deptError;
+
+            // Build department min hours map
+            const deptMinHoursMap = {};
+            (deptData || []).forEach(d => {
+                deptMinHoursMap[d.id] = d.min_hours_full_day || '09:30';
+            });
+
+            // Get laborers based on status filter
             let laborQuery = supabaseClient
                 .from('laborers')
-                .select('labor_id, iqama_number, name, date_of_joining, department_id')
+                .select('labor_id, iqama_number, name, date_of_joining, department_id, status, last_working_date, role, monthly_salary')
                 .eq('client_id', AUTH.getClientId());
 
             if (departmentFilter) {
                 laborQuery = laborQuery.eq('department_id', departmentFilter);
             }
+
+            // Apply status filter logic
+            if (statusFilter === 'active') {
+                // Active laborers OR laborers who became inactive during/after this month
+                laborQuery = laborQuery.or(`status.eq.active,and(status.eq.inactive,last_working_date.gte.${startDate})`);
+            } else if (statusFilter === 'inactive') {
+                // Inactive laborers whose last_working_date is before this month
+                laborQuery = laborQuery.eq('status', 'inactive').lt('last_working_date', startDate);
+            }
+            // If statusFilter is empty/all, no additional filter
 
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
@@ -120,7 +192,7 @@ const ReportAPI = {
                 return aNum - bNum;
             });
 
-            // Get all attendance records for the month (including first_login, last_logout)
+            // Get all attendance records for the month
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status, first_login, last_logout')
@@ -149,90 +221,126 @@ const ReportAPI = {
             // Build report data
             const reportData = laborers.map(laborer => {
                 const doj = new Date(laborer.date_of_joining);
+                const lastWorkingDate = laborer.last_working_date ? new Date(laborer.last_working_date) : null;
+                const minHours = deptMinHoursMap[laborer.department_id] || '09:30';
+                const monthlySalary = laborer.monthly_salary || 3000;
+
                 const days = {};
                 let presentCount = 0;
                 let halfDayCount = 0;
                 let absentCount = 0;
                 let fridayCount = 0;
+                let totalMinutes = 0;
 
                 for (let day = 1; day <= lastDay; day++) {
                     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dateObj = new Date(dateStr);
                     const isFriday = dateObj.getDay() === 5;
                     const isBeforeDOJ = dateObj < doj;
+                    const isAfterLWD = lastWorkingDate && dateObj > lastWorkingDate;
 
                     const key = `${laborer.labor_id}_${dateStr}`;
                     const record = attendanceMap[key] || null;
-                    let status = record ? record.status : null;
                     let firstIn = record ? record.firstIn : null;
                     let lastOut = record ? record.lastOut : null;
+                    let workedMinutes = this.calculateHours(firstIn, lastOut);
+                    let status = null;
+                    let hours = '';
 
-                    if (isFriday) {
-                        if (isBeforeDOJ) {
+                    if (isBeforeDOJ || isAfterLWD) {
+                        // Before joining or after last working date = Absent
+                        status = 'A';
+                        absentCount++;
+                        firstIn = null;
+                        lastOut = null;
+                        workedMinutes = 0;
+                    } else if (isFriday) {
+                        // Sandwich rule: Thu Absent + Sat Absent = Fri Absent
+                        const thursdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day - 1).padStart(2, '0')}`;
+                        const saturdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day + 1).padStart(2, '0')}`;
+                        
+                        const thursdayKey = `${laborer.labor_id}_${thursdayStr}`;
+                        const saturdayKey = `${laborer.labor_id}_${saturdayStr}`;
+                        
+                        // Get Thursday status
+                        let thursdayStatus = 'A';
+                        const thursdayRecord = attendanceMap[thursdayKey];
+                        if (thursdayRecord && thursdayRecord.firstIn && thursdayRecord.lastOut) {
+                            const thuMinutes = this.calculateHours(thursdayRecord.firstIn, thursdayRecord.lastOut);
+                            thursdayStatus = this.determineStatus(thuMinutes, minHours);
+                        } else if (thursdayRecord && thursdayRecord.status) {
+                            thursdayStatus = thursdayRecord.status;
+                        }
+
+                        // Get Saturday status
+                        let saturdayStatus = 'A';
+                        if (day + 1 <= lastDay) {
+                            const saturdayRecord = attendanceMap[saturdayKey];
+                            if (saturdayRecord && saturdayRecord.firstIn && saturdayRecord.lastOut) {
+                                const satMinutes = this.calculateHours(saturdayRecord.firstIn, saturdayRecord.lastOut);
+                                saturdayStatus = this.determineStatus(satMinutes, minHours);
+                            } else if (saturdayRecord && saturdayRecord.status) {
+                                saturdayStatus = saturdayRecord.status;
+                            }
+                        }
+
+                        if (thursdayStatus === 'A' && saturdayStatus === 'A') {
                             status = 'A';
                             absentCount++;
                         } else {
-                            // Sandwich rule: Thu Absent + Sat Absent = Fri Absent
-                            const thursdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day - 1).padStart(2, '0')}`;
-                            const saturdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day + 1).padStart(2, '0')}`;
-                            
-                            const thursdayKey = `${laborer.labor_id}_${thursdayStr}`;
-                            const saturdayKey = `${laborer.labor_id}_${saturdayStr}`;
-                            
-                            const thursdayRecord = attendanceMap[thursdayKey];
-                            const saturdayRecord = attendanceMap[saturdayKey];
-                            
-                            const thursdayStatus = thursdayRecord ? thursdayRecord.status : 'A';
-                            const saturdayStatus = day + 1 <= lastDay ? (saturdayRecord ? saturdayRecord.status : 'A') : 'A';
-                            
-                            if (thursdayStatus === 'A' && saturdayStatus === 'A') {
-                                status = 'A';
-                                absentCount++;
-                            } else {
-                                status = 'F';
-                                fridayCount++;
-                            }
+                            status = 'F';
+                            fridayCount++;
                         }
                         // Clear in/out for Friday
                         firstIn = null;
                         lastOut = null;
-                    } else if (isBeforeDOJ) {
+                        workedMinutes = 0;
+                    } else if (workedMinutes > 0) {
+                        // Calculate status based on worked hours
+                        status = this.determineStatus(workedMinutes, minHours);
+                        hours = this.formatMinutesToHHMM(workedMinutes);
+                        totalMinutes += workedMinutes;
+
+                        if (status === 'P') presentCount++;
+                        else if (status === 'H') halfDayCount++;
+                        else absentCount++;
+                    } else {
+                        // No punch = Absent
                         status = 'A';
-                        absentCount++;
-                        firstIn = null;
-                        lastOut = null;
-                    } else if (!status) {
-                        status = 'A';
-                        absentCount++;
-                    } else if (status === 'P') {
-                        presentCount++;
-                    } else if (status === 'H') {
-                        halfDayCount++;
-                    } else if (status === 'A') {
                         absentCount++;
                     }
 
                     days[day] = {
                         status: status,
                         in: this.formatTime12h(firstIn),
-                        out: this.formatTime12h(lastOut)
+                        out: this.formatTime12h(lastOut),
+                        hours: hours
                     };
                 }
 
                 // Calculate total paid days: P*1 + F*1 + H*0.5
                 const totalPaidDays = presentCount + fridayCount + (halfDayCount * 0.5);
 
+                // Calculate salary: (totalPaidDays / 30) * monthlySalary
+                const calculatedSalary = Math.round((totalPaidDays / 30) * monthlySalary);
+
                 return {
                     laborId: laborer.labor_id,
                     iqamaNumber: laborer.iqama_number,
                     name: laborer.name,
                     dateOfJoining: laborer.date_of_joining,
+                    lastWorkingDate: laborer.last_working_date,
+                    role: laborer.role || 'labor',
+                    monthlySalary: monthlySalary,
                     days,
                     presentCount,
                     halfDayCount,
                     absentCount,
                     fridayCount,
-                    totalPaidDays
+                    totalPaidDays,
+                    totalHours: this.formatMinutesToHHMM(totalMinutes),
+                    totalMinutes,
+                    calculatedSalary
                 };
             });
 
