@@ -28,6 +28,7 @@
                         <tr>
                             <th>Code</th>
                             <th>Department Name</th>
+                            <th>Min Hours (Full Day)</th>
                             <th>Status</th>
                             <th>Created</th>
                             <th>Actions</th>
@@ -35,7 +36,7 @@
                     </thead>
                     <tbody id="departmentTable">
                         <tr>
-                            <td colspan="5" class="text-center p-20">Loading...</td>
+                            <td colspan="6" class="text-center p-20">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -59,6 +60,11 @@
                 <div class="form-group">
                     <label>Code * (Short code, uppercase)</label>
                     <input type="text" id="deptCode" class="form-control" placeholder="e.g., WH" maxlength="10" required>
+                </div>
+                <div class="form-group">
+                    <label>Min Hours for Full Day *</label>
+                    <input type="time" id="deptMinHours" class="form-control" value="09:30" required>
+                    <small style="color: #666;">Half Day = 50% of this value. Less than half = Absent.</small>
                 </div>
                 <div class="form-group">
                     <label>Status</label>
@@ -87,12 +93,19 @@
     <script src="../js/api/department-api.js"></script>
 
     <script>
-        // Require Super Admin
+        // Require Admin
         if (!AUTH.requireRole(['admin'])) {
             // Redirect handled by requireRole
         }
 
         let departments = [];
+
+        // Format time for display (HH:MM)
+        function formatMinHours(timeStr) {
+            if (!timeStr) return '09:30';
+            // Handle both "09:30:00" and "09:30" formats
+            return timeStr.substring(0, 5);
+        }
 
         // Load departments
         async function loadDepartments() {
@@ -113,7 +126,7 @@
                 SyncIndicator.hide();
                 Toast.error('Failed to load departments: ' + error.message);
                 document.getElementById('departmentTable').innerHTML = `
-                    <tr><td colspan="5" class="text-center p-20 text-danger">
+                    <tr><td colspan="6" class="text-center p-20 text-danger">
                         ❌ Failed to load. Check internet connection.
                     </td></tr>
                 `;
@@ -126,7 +139,7 @@
 
             if (departments.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="5" class="text-center p-20 text-muted">
+                    <tr><td colspan="6" class="text-center p-20 text-muted">
                         No departments found. Click "Add Department" to create one.
                     </td></tr>
                 `;
@@ -137,6 +150,7 @@
                 <tr>
                     <td><strong>${dept.code}</strong></td>
                     <td>${dept.name}</td>
+                    <td><strong>${formatMinHours(dept.min_hours_full_day)}</strong></td>
                     <td>
                         <span class="badge badge-${dept.status === 'active' ? 'active' : 'inactive'}">
                             ${dept.status}
@@ -157,6 +171,7 @@
             document.getElementById('editId').value = '';
             document.getElementById('deptName').value = '';
             document.getElementById('deptCode').value = '';
+            document.getElementById('deptMinHours').value = '09:30';
             document.getElementById('deptStatus').value = 'active';
             document.getElementById('departmentModal').classList.add('active');
         }
@@ -170,6 +185,7 @@
             document.getElementById('editId').value = dept.id;
             document.getElementById('deptName').value = dept.name;
             document.getElementById('deptCode').value = dept.code;
+            document.getElementById('deptMinHours').value = formatMinHours(dept.min_hours_full_day);
             document.getElementById('deptStatus').value = dept.status;
             document.getElementById('departmentModal').classList.add('active');
         }
@@ -184,9 +200,10 @@
             const editId = document.getElementById('editId').value;
             const name = document.getElementById('deptName').value.trim();
             const code = document.getElementById('deptCode').value.trim().toUpperCase();
+            const minHours = document.getElementById('deptMinHours').value;
             const status = document.getElementById('deptStatus').value;
 
-            if (!name || !code) {
+            if (!name || !code || !minHours) {
                 Toast.error('Please fill all required fields');
                 return;
             }
@@ -196,9 +213,9 @@
 
                 let result;
                 if (editId) {
-                    result = await DepartmentAPI.update(editId, { name, code, status });
+                    result = await DepartmentAPI.update(editId, { name, code, status, min_hours_full_day: minHours });
                 } else {
-                    result = await DepartmentAPI.create({ name, code, status });
+                    result = await DepartmentAPI.create({ name, code, status, min_hours_full_day: minHours });
                 }
 
                 if (result.success) {
