@@ -46,7 +46,7 @@ const ReportAPI = {
             // 1. Get all active laborers
             let laborQuery = supabaseClient
                 .from('laborers')
-                .select('labor_id, name, iqama_number, department_id, date_of_joining, status')
+                .select('labor_id, name, iqama_number, department_id, date_of_joining, status, role')
                 .eq('client_id', clientId)
                 .eq('status', 'active');
 
@@ -111,6 +111,7 @@ const ReportAPI = {
                         result.push({
                             ...record,
                             laborName: labor.name,
+                            role: labor.role || 'Labor',
                             iqamaNumber: labor.iqama_number,
                             departmentName: deptMap[labor.department_id] || '-',
                             hasRecord: true,
@@ -133,6 +134,7 @@ const ReportAPI = {
                             lop_reason: null,
                             client_id: clientId,
                             laborName: labor.name,
+                            role: labor.role || 'Labor',
                             iqamaNumber: labor.iqama_number,
                             departmentName: deptMap[labor.department_id] || '-',
                             hasRecord: false,
