@@ -1,6 +1,6 @@
-// AK Attendance - Report API v3 (with Hours, Min Hours Logic, Salary Calculation)
+// AK Attendance - Report API v4 (with Complete Attendance, Absent Streak)
 const ReportAPI = {
-    // Get daily attendance summary
+    // Get daily attendance summary (original - only punched laborers)
     async getDailyAttendance(fromDate, toDate, departmentId = null) {
         try {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
@@ -34,6 +34,333 @@ const ReportAPI = {
         } catch (error) {
             console.error('Get daily attendance error:', error);
             return { success: false, error: error.message };
+        }
+    },
+
+    // Get COMPLETE attendance - ALL active laborers (punched + non-punched)
+    async getCompleteAttendance(fromDate, toDate, departmentId = null) {
+        try {
+            const departmentFilter = departmentId || AUTH.getDepartmentFilter();
+            const clientId = AUTH.getClientId();
+
+            // 1. Get all active laborers
+            let laborQuery = supabaseClient
+                .from('laborers')
+                .select('labor_id, name, iqama_number, department_id, date_of_joining, status')
+                .eq('client_id', clientId)
+                .eq('status', 'active');
+
+            if (departmentFilter) {
+                laborQuery = laborQuery.eq('department_id', departmentFilter);
+            }
+
+            const { data: laborers, error: laborError } = await laborQuery;
+            if (laborError) throw laborError;
+
+            // 2. Get all attendance records for date range
+            let attendanceQuery = supabaseClient
+                .from('daily_attendance')
+                .select('*')
+                .eq('client_id', clientId)
+                .gte('date', fromDate)
+                .lte('date', toDate);
+
+            if (departmentFilter) {
+                attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
+            }
+
+            const { data: attendance, error: attError } = await attendanceQuery;
+            if (attError) throw attError;
+
+            // 3. Get departments for names
+            const { data: departments } = await supabaseClient
+                .from('departments')
+                .select('id, name')
+                .eq('client_id', clientId);
+
+            const deptMap = {};
+            (departments || []).forEach(d => deptMap[d.id] = d.name);
+
+            // 4. Build attendance map
+            const attendanceMap = {};
+            (attendance || []).forEach(a => {
+                const key = `${a.labor_id}_${a.date}`;
+                attendanceMap[key] = a;
+            });
+
+            // 5. Generate all date + labor combinations
+            const result = [];
+            const startDate = new Date(fromDate);
+            const endDate = new Date(toDate);
+
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                const dateStr = d.toISOString().split('T')[0];
+                const dayOfWeek = d.getDay(); // 0=Sun, 5=Fri
+
+                for (const labor of laborers) {
+                    const key = `${labor.labor_id}_${dateStr}`;
+                    const record = attendanceMap[key];
+
+                    // Skip if labor joined after this date
+                    if (labor.date_of_joining && new Date(labor.date_of_joining) > d) {
+                        continue;
+                    }
+
+                    if (record) {
+                        // Has attendance record
+                        result.push({
+                            ...record,
+                            laborName: labor.name,
+                            iqamaNumber: labor.iqama_number,
+                            departmentName: deptMap[labor.department_id] || '-',
+                            hasRecord: true,
+                            isFriday: dayOfWeek === 5
+                        });
+                    } else {
+                        // No attendance record - create virtual absent record
+                        result.push({
+                            id: null, // No DB record
+                            labor_id: labor.labor_id,
+                            department_id: labor.department_id,
+                            date: dateStr,
+                            first_login: null,
+                            last_logout: null,
+                            total_hours: null,
+                            auto_status: dayOfWeek === 5 ? 'F' : 'A',
+                            final_status: dayOfWeek === 5 ? 'F' : 'A',
+                            approved_by: null,
+                            approved_at: null,
+                            lop_reason: null,
+                            client_id: clientId,
+                            laborName: labor.name,
+                            iqamaNumber: labor.iqama_number,
+                            departmentName: deptMap[labor.department_id] || '-',
+                            hasRecord: false,
+                            isFriday: dayOfWeek === 5
+                        });
+                    }
+                }
+            }
+
+            // Sort by date desc, then labor_id
+            result.sort((a, b) => {
+                if (a.date !== b.date) {
+                    return new Date(b.date) - new Date(a.date);
+                }
+                const aNum = parseInt(a.labor_id.replace(/\D/g, '')) || 0;
+                const bNum = parseInt(b.labor_id.replace(/\D/g, '')) || 0;
+                return aNum - bNum;
+            });
+
+            return { success: true, data: result };
+        } catch (error) {
+            console.error('Get complete attendance error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Create absent record and approve LOP (for laborers who didn't punch)
+    async createAbsentAndApprove(laborId, date, departmentId, reason) {
+        try {
+            const session = AUTH.getSession();
+            const clientId = AUTH.getClientId();
+
+            // Check if record already exists
+            const { data: existing } = await supabaseClient
+                .from('daily_attendance')
+                .select('id')
+                .eq('client_id', clientId)
+                .eq('labor_id', laborId)
+                .eq('date', date)
+                .single();
+
+            if (existing) {
+                // Record exists, just update it
+                const { error } = await supabaseClient
+                    .from('daily_attendance')
+                    .update({
+                        final_status: 'P',
+                        approved_by: session.name,
+                        approved_at: new Date().toISOString(),
+                        lop_reason: reason
+                    })
+                    .eq('id', existing.id);
+
+                if (error) throw error;
+                return { success: true, recordId: existing.id };
+            }
+
+            // Create new record
+            const { data: newRecord, error: insertError } = await supabaseClient
+                .from('daily_attendance')
+                .insert({
+                    labor_id: laborId,
+                    department_id: departmentId,
+                    date: date,
+                    first_login: null,
+                    last_logout: null,
+                    total_hours: 0,
+                    auto_status: 'A',
+                    final_status: 'P',
+                    approved_by: session.name,
+                    approved_at: new Date().toISOString(),
+                    lop_reason: reason,
+                    client_id: clientId
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+            return { success: true, recordId: newRecord.id };
+        } catch (error) {
+            console.error('Create absent and approve error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Get absent streak for a labor (consecutive absent days)
+    async getAbsentStreak(laborId) {
+        try {
+            const clientId = AUTH.getClientId();
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            
+            // Look back 30 days max
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+            // Get attendance records for last 30 days
+            const { data: attendance, error } = await supabaseClient
+                .from('daily_attendance')
+                .select('date, final_status')
+                .eq('client_id', clientId)
+                .eq('labor_id', laborId)
+                .gte('date', thirtyDaysAgoStr)
+                .lte('date', todayStr)
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            // Build date map
+            const attendanceMap = {};
+            (attendance || []).forEach(a => {
+                attendanceMap[a.date] = a.final_status;
+            });
+
+            // Count consecutive absent days from today backwards
+            let streak = 0;
+            for (let d = new Date(today); d >= thirtyDaysAgo; d.setDate(d.getDate() - 1)) {
+                const dateStr = d.toISOString().split('T')[0];
+                const dayOfWeek = d.getDay();
+                
+                // Skip Fridays
+                if (dayOfWeek === 5) continue;
+
+                const status = attendanceMap[dateStr];
+                
+                // If no record or status is A, count as absent
+                if (!status || status === 'A') {
+                    streak++;
+                } else {
+                    // Found a non-absent day, stop counting
+                    break;
+                }
+            }
+
+            return { success: true, streak };
+        } catch (error) {
+            console.error('Get absent streak error:', error);
+            return { success: false, streak: 0, error: error.message };
+        }
+    },
+
+    // Get absent streaks for all active laborers (for Labor Master badge)
+    async getAllAbsentStreaks(departmentId = null) {
+        try {
+            const clientId = AUTH.getClientId();
+            const departmentFilter = departmentId || AUTH.getDepartmentFilter();
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            
+            // Look back 30 days
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+            // Get all active laborers
+            let laborQuery = supabaseClient
+                .from('laborers')
+                .select('labor_id, date_of_joining')
+                .eq('client_id', clientId)
+                .eq('status', 'active');
+
+            if (departmentFilter) {
+                laborQuery = laborQuery.eq('department_id', departmentFilter);
+            }
+
+            const { data: laborers, error: laborError } = await laborQuery;
+            if (laborError) throw laborError;
+
+            // Get all attendance for last 30 days
+            let attendanceQuery = supabaseClient
+                .from('daily_attendance')
+                .select('labor_id, date, final_status')
+                .eq('client_id', clientId)
+                .gte('date', thirtyDaysAgoStr)
+                .lte('date', todayStr);
+
+            if (departmentFilter) {
+                attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
+            }
+
+            const { data: attendance, error: attError } = await attendanceQuery;
+            if (attError) throw attError;
+
+            // Build attendance map by labor
+            const attendanceByLabor = {};
+            (attendance || []).forEach(a => {
+                if (!attendanceByLabor[a.labor_id]) {
+                    attendanceByLabor[a.labor_id] = {};
+                }
+                attendanceByLabor[a.labor_id][a.date] = a.final_status;
+            });
+
+            // Calculate streak for each labor
+            const streaks = {};
+            for (const labor of laborers) {
+                const laborAttendance = attendanceByLabor[labor.labor_id] || {};
+                let streak = 0;
+                const doj = labor.date_of_joining ? new Date(labor.date_of_joining) : null;
+
+                for (let d = new Date(today); d >= thirtyDaysAgo; d.setDate(d.getDate() - 1)) {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const dayOfWeek = d.getDay();
+                    
+                    // Skip Fridays
+                    if (dayOfWeek === 5) continue;
+
+                    // Skip dates before DOJ
+                    if (doj && d < doj) break;
+
+                    const status = laborAttendance[dateStr];
+                    
+                    if (!status || status === 'A') {
+                        streak++;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (streak >= 3) {
+                    streaks[labor.labor_id] = streak;
+                }
+            }
+
+            return { success: true, data: streaks };
+        } catch (error) {
+            console.error('Get all absent streaks error:', error);
+            return { success: false, data: {}, error: error.message };
         }
     },
 
@@ -304,6 +631,12 @@ const ReportAPI = {
                         if (status === 'P') presentCount++;
                         else if (status === 'H') halfDayCount++;
                         else absentCount++;
+                    } else if (record && record.status) {
+                        // Has record but no punch times (LOP approved)
+                        status = record.status;
+                        if (status === 'P') presentCount++;
+                        else if (status === 'H') halfDayCount++;
+                        else absentCount++;
                     } else {
                         // No punch = Absent
                         status = 'A';
@@ -451,9 +784,14 @@ const ReportAPI = {
         }
     },
 
-    // Approve LOP (single)
-    async approveLOP(attendanceId, reason) {
+    // Approve LOP (single) - works for both existing and new records
+    async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null) {
         try {
+            // If no attendanceId, create new record
+            if (!attendanceId && laborId && date && departmentId) {
+                return await this.createAbsentAndApprove(laborId, date, departmentId, reason);
+            }
+
             const session = AUTH.getSession();
             
             const { error } = await supabaseClient
@@ -513,7 +851,7 @@ const ReportAPI = {
             const { error } = await supabaseClient
                 .from('daily_attendance')
                 .update({
-                    final_status: originalStatus,
+                    final_status: originalStatus || 'A',
                     approved_by: null,
                     approved_at: null,
                     lop_reason: null
