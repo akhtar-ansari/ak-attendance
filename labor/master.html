@@ -36,6 +36,21 @@
         .role-badge.labor { background: #e2e8f0; color: #4a5568; }
         .role-badge.team_leader { background: #fef3c7; color: #92400e; }
         .salary-cell { font-weight: 600; color: #2d3748; }
+        .absent-streak-badge {
+            display: inline-block;
+            background: #fed7d7;
+            color: #c53030;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
     </style>
 </head>
 <body>
@@ -143,9 +158,9 @@
                     </div>
                     
                     <div class="form-group">
-    <label>Role *</label>
-    <input type="text" id="laborRole" class="form-control" placeholder="e.g., Labor, Team Leader, Supervisor" value="Labor" required>
-</div>
+                        <label>Role *</label>
+                        <input type="text" id="laborRole" class="form-control" placeholder="e.g., Labor, Team Leader, Supervisor" value="Labor" required>
+                    </div>
                     
                     <div class="form-group">
                         <label>Monthly Salary (SAR) *</label>
@@ -204,6 +219,7 @@
     <script src="../js/ui/toast.js"></script>
     <script src="../js/api/department-api.js"></script>
     <script src="../js/api/labor-api.js"></script>
+    <script src="../js/api/report-api.js"></script>
 
     <script>
         // Require login
@@ -215,6 +231,7 @@
         let laborers = [];
         let departments = [];
         let filteredLaborers = [];
+        let absentStreaks = {}; // Store absent streaks by labor_id
 
         // Check permissions for add/import
         function checkPermissions() {
@@ -245,10 +262,17 @@
                         return numA - numB;
                     });
                     filteredLaborers = [...laborers];
-                    applyFilters(); // Apply default filter (Active)
                 } else {
                     throw new Error(laborResult.error);
                 }
+
+                // Load absent streaks (3+ consecutive absent days)
+                const streakResult = await ReportAPI.getAllAbsentStreaks();
+                if (streakResult.success) {
+                    absentStreaks = streakResult.data;
+                }
+
+                applyFilters(); // Apply default filter (Active)
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -323,8 +347,19 @@
 
         // Format role for display
         function formatRole(role) {
-            if (role === 'team_leader') return '<span class="role-badge team_leader">Team Leader</span>';
-            return '<span class="role-badge labor">Labor</span>';
+            if (!role || role === 'labor' || role === 'Labor') {
+                return '<span class="role-badge labor">Labor</span>';
+            }
+            return `<span class="role-badge team_leader">${role}</span>`;
+        }
+
+        // Get absent streak badge HTML
+        function getAbsentStreakBadge(laborId) {
+            const streak = absentStreaks[laborId];
+            if (streak && streak >= 3) {
+                return `<span class="absent-streak-badge" title="${streak} consecutive absent days">⚠️ ${streak} days absent</span>`;
+            }
+            return '';
         }
 
         // Render table
@@ -397,10 +432,13 @@
                     statusHtml += `<br><small style="color:#718096;">LWD: ${DateUtils.formatDate(labor.last_working_date)}</small>`;
                 }
 
+                // Absent streak badge (only for active laborers)
+                const absentBadge = labor.status === 'active' ? getAbsentStreakBadge(labor.labor_id) : '';
+
                 return `
                     <tr>
                         <td><strong>${labor.labor_id}</strong></td>
-                        <td>${labor.name}</td>
+                        <td>${labor.name}${absentBadge}</td>
                         <td>${labor.iqama_number}</td>
                         <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
                         <td>${labor.nationality}</td>
@@ -425,7 +463,7 @@
             document.getElementById('laborIqama').disabled = false;
             document.getElementById('laborDOJ').value = '';
             document.getElementById('laborNationality').value = '';
-            document.getElementById('laborRole').value = 'labor';
+            document.getElementById('laborRole').value = 'Labor';
             document.getElementById('laborSalary').value = 3000;
             document.getElementById('laborStatus').value = 'active';
             
@@ -452,7 +490,7 @@
             document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
             document.getElementById('laborNationality').value = labor.nationality;
             document.getElementById('laborDepartment').value = labor.department_id;
-            document.getElementById('laborRole').value = labor.role || 'labor';
+            document.getElementById('laborRole').value = labor.role || 'Labor';
             document.getElementById('laborSalary').value = labor.monthly_salary || 3000;
             document.getElementById('laborStatus').value = labor.status;
 
@@ -472,7 +510,7 @@
             const dateOfJoining = document.getElementById('laborDOJ').value;
             const nationality = document.getElementById('laborNationality').value.trim();
             const departmentId = document.getElementById('laborDepartment').value;
-            const role = document.getElementById('laborRole').value;
+            const role = document.getElementById('laborRole').value.trim() || 'Labor';
             const monthlySalary = parseFloat(document.getElementById('laborSalary').value) || 3000;
             const status = document.getElementById('laborStatus').value;
 
@@ -649,11 +687,12 @@
                 'Date of Joining': DateUtils.formatDate(l.date_of_joining),
                 'Nationality': l.nationality,
                 'Department': l.departments?.name || '',
-                'Role': l.role || 'labor',
+                'Role': l.role || 'Labor',
                 'Monthly Salary': l.monthly_salary || 3000,
                 'Status': l.status,
                 'Last Working Date': l.last_working_date ? DateUtils.formatDate(l.last_working_date) : '',
-                'Face Enrolled': l.face_enrolled ? 'Yes' : 'No'
+                'Face Enrolled': l.face_enrolled ? 'Yes' : 'No',
+                'Absent Streak': absentStreaks[l.labor_id] || 0
             }));
 
             CSVHandler.exportToCSV(data, 'labor_master');
