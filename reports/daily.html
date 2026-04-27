@@ -270,6 +270,7 @@
                             <th>Date</th>
                             <th>Labor ID</th>
                             <th>Name</th>
+                            <th>Role</th>
                             <th>Department</th>
                             <th>Login</th>
                             <th>Logout</th>
@@ -605,6 +606,7 @@
                         <td>${DateUtils.formatDate(record.date)}</td>
                         <td><strong>${record.labor_id}</strong></td>
                         <td>${record.laborName || 'Unknown'} ${noPunchBadge}</td>
+                        <td>${record.role || 'Labor'}</td>
                         <td>${record.departmentName || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
