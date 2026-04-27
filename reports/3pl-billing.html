@@ -59,6 +59,12 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .billing-table td.role-cell {
+            font-size: 9px;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .billing-table td.time-cell {
             font-size: 9px;
             color: #4a5568;
@@ -138,6 +144,33 @@
             font-weight: 600;
             font-size: 11px;
         }
+        .month-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .month-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 12px;
+            background: #edf2f7;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .month-checkbox:hover {
+            background: #e2e8f0;
+        }
+        .month-checkbox input {
+            cursor: pointer;
+        }
+        .month-checkbox.selected {
+            background: #667eea;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -160,23 +193,6 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Month</label>
-                        <select id="monthSelect" class="form-control">
-                            <option value="1">January</option>
-                            <option value="2">February</option>
-                            <option value="3">March</option>
-                            <option value="4">April</option>
-                            <option value="5">May</option>
-                            <option value="6">June</option>
-                            <option value="7">July</option>
-                            <option value="8">August</option>
-                            <option value="9">September</option>
-                            <option value="10">October</option>
-                            <option value="11">November</option>
-                            <option value="12">December</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label>Department</label>
                         <select id="departmentFilter" class="form-control">
                             <option value="">All Departments</option>
@@ -191,6 +207,25 @@
                         </select>
                     </div>
                 </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>Select Month(s) <small style="color:#666;">(Select one or more)</small></label>
+                    <div class="month-checkboxes" id="monthCheckboxes">
+                        <label class="month-checkbox"><input type="checkbox" value="1"> Jan</label>
+                        <label class="month-checkbox"><input type="checkbox" value="2"> Feb</label>
+                        <label class="month-checkbox"><input type="checkbox" value="3"> Mar</label>
+                        <label class="month-checkbox"><input type="checkbox" value="4"> Apr</label>
+                        <label class="month-checkbox"><input type="checkbox" value="5"> May</label>
+                        <label class="month-checkbox"><input type="checkbox" value="6"> Jun</label>
+                        <label class="month-checkbox"><input type="checkbox" value="7"> Jul</label>
+                        <label class="month-checkbox"><input type="checkbox" value="8"> Aug</label>
+                        <label class="month-checkbox"><input type="checkbox" value="9"> Sep</label>
+                        <label class="month-checkbox"><input type="checkbox" value="10"> Oct</label>
+                        <label class="month-checkbox"><input type="checkbox" value="11"> Nov</label>
+                        <label class="month-checkbox"><input type="checkbox" value="12"> Dec</label>
+                    </div>
+                </div>
+                
                 <div class="action-buttons" style="margin-top: 15px;">
                     <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
                     <button type="button" class="btn btn-success" onclick="exportExcel()">📥 Export Excel</button>
@@ -221,7 +256,7 @@
             <!-- Report Table -->
             <div class="billing-table-container" id="reportContainer">
                 <div class="text-center p-20 text-muted">
-                    Select year, month and click "Generate Report"
+                    Select year, month(s) and click "Generate Report"
                 </div>
             </div>
         </div>
@@ -247,8 +282,7 @@
 
         const session = AUTH.getSession();
         let departments = [];
-        let reportData = [];
-        let reportMeta = {};
+        let allMonthsData = []; // Store data for all selected months
 
         // Get ordinal suffix for day
         function getOrdinal(n) {
@@ -281,10 +315,34 @@
             }
         }
 
-        // Set current month
+        // Set current month checkbox
         function setCurrentMonth() {
             const currentMonth = new Date().getMonth() + 1;
-            document.getElementById('monthSelect').value = currentMonth;
+            const checkbox = document.querySelector(`#monthCheckboxes input[value="${currentMonth}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+                checkbox.parentElement.classList.add('selected');
+            }
+        }
+
+        // Setup month checkbox toggle
+        function setupMonthCheckboxes() {
+            const checkboxes = document.querySelectorAll('#monthCheckboxes input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    if (this.checked) {
+                        this.parentElement.classList.add('selected');
+                    } else {
+                        this.parentElement.classList.remove('selected');
+                    }
+                });
+            });
+        }
+
+        // Get selected months
+        function getSelectedMonths() {
+            const checkboxes = document.querySelectorAll('#monthCheckboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => a - b);
         }
 
         // Load departments
@@ -310,26 +368,40 @@
         // Generate report
         async function generateReport() {
             const year = parseInt(document.getElementById('yearSelect').value);
-            const month = parseInt(document.getElementById('monthSelect').value);
+            const selectedMonths = getSelectedMonths();
             const departmentId = document.getElementById('departmentFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
+
+            if (selectedMonths.length === 0) {
+                Toast.error('Please select at least one month');
+                return;
+            }
 
             try {
                 SyncIndicator.show('Generating billing report...');
 
-                const result = await ReportAPI.getMonthlyBilling(year, month, departmentId, statusFilter);
+                allMonthsData = [];
 
-                if (!result.success) {
-                    throw new Error(result.error);
+                // Fetch data for each selected month
+                for (const month of selectedMonths) {
+                    const result = await ReportAPI.getMonthlyBilling(year, month, departmentId, statusFilter);
+
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+
+                    allMonthsData.push({
+                        month,
+                        year,
+                        data: result.data,
+                        meta: result.meta
+                    });
                 }
-
-                reportData = result.data;
-                reportMeta = result.meta;
 
                 renderTable();
 
                 SyncIndicator.hide();
-                Toast.success(`Report generated for ${reportData.length} laborers`);
+                Toast.success(`Report generated: ${selectedMonths.length} month(s), ${allMonthsData[0]?.data.length || 0} laborers`);
 
             } catch (error) {
                 SyncIndicator.hide();
@@ -341,7 +413,7 @@
         function renderTable() {
             const container = document.getElementById('reportContainer');
 
-            if (reportData.length === 0) {
+            if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
                 container.innerHTML = `
                     <div class="text-center p-20 text-muted">
                         No data found for selected period
@@ -350,8 +422,20 @@
                 return;
             }
 
-            const totalDays = reportMeta.totalDays;
-            const shortMonth = getShortMonthName(reportMeta.month);
+            // Calculate total days across all months
+            let allDays = [];
+            allMonthsData.forEach(monthData => {
+                const totalDays = monthData.meta.totalDays;
+                const shortMonth = getShortMonthName(monthData.month);
+                for (let day = 1; day <= totalDays; day++) {
+                    allDays.push({
+                        day,
+                        month: monthData.month,
+                        year: monthData.year,
+                        label: `${day} ${shortMonth}`
+                    });
+                }
+            });
 
             // Build header row 1 (day groups)
             let headerRow1 = `
@@ -360,12 +444,13 @@
                     <th rowspan="2">Labor ID</th>
                     <th rowspan="2">Iqama</th>
                     <th rowspan="2">Name</th>
+                    <th rowspan="2">Role</th>
                     <th rowspan="2">DOJ</th>
             `;
 
-            for (let day = 1; day <= totalDays; day++) {
-                headerRow1 += `<th colspan="4" class="day-group">${day} ${shortMonth}</th>`;
-            }
+            allDays.forEach(d => {
+                headerRow1 += `<th colspan="4" class="day-group">${d.label}</th>`;
+            });
 
             headerRow1 += `
                     <th rowspan="2">Total Hrs</th>
@@ -380,15 +465,57 @@
 
             // Build header row 2 (In/Out/Hrs/Status sub-headers)
             let headerRow2 = '<tr>';
-            for (let day = 1; day <= totalDays; day++) {
+            allDays.forEach(() => {
                 headerRow2 += `
                     <th class="sub-header">In</th>
                     <th class="sub-header">Out</th>
                     <th class="sub-header">Hrs</th>
                     <th class="sub-header">St</th>
                 `;
-            }
+            });
             headerRow2 += '</tr>';
+
+            // Merge data from all months by labor ID
+            const laborMap = new Map();
+            
+            allMonthsData.forEach(monthData => {
+                monthData.data.forEach(labor => {
+                    if (!laborMap.has(labor.laborId)) {
+                        laborMap.set(labor.laborId, {
+                            laborId: labor.laborId,
+                            iqamaNumber: labor.iqamaNumber,
+                            name: labor.name,
+                            role: labor.role,
+                            dateOfJoining: labor.dateOfJoining,
+                            months: {},
+                            totalMinutes: 0,
+                            presentCount: 0,
+                            halfDayCount: 0,
+                            absentCount: 0,
+                            fridayCount: 0,
+                            totalPaidDays: 0,
+                            calculatedSalary: 0
+                        });
+                    }
+                    
+                    const laborEntry = laborMap.get(labor.laborId);
+                    laborEntry.months[monthData.month] = labor.days;
+                    laborEntry.totalMinutes += labor.totalMinutes || 0;
+                    laborEntry.presentCount += labor.presentCount;
+                    laborEntry.halfDayCount += labor.halfDayCount;
+                    laborEntry.absentCount += labor.absentCount;
+                    laborEntry.fridayCount += labor.fridayCount;
+                    laborEntry.totalPaidDays += labor.totalPaidDays;
+                    laborEntry.calculatedSalary += labor.calculatedSalary;
+                });
+            });
+
+            // Convert to array and sort
+            const mergedData = Array.from(laborMap.values()).sort((a, b) => {
+                const aNum = parseInt(a.laborId.replace(/\D/g, '')) || 0;
+                const bNum = parseInt(b.laborId.replace(/\D/g, '')) || 0;
+                return aNum - bNum;
+            });
 
             // Build body
             let bodyHtml = '';
@@ -400,18 +527,20 @@
             let grandTotalPaid = 0;
             let grandTotalSalary = 0;
 
-            reportData.forEach((labor, index) => {
+            mergedData.forEach((labor, index) => {
                 bodyHtml += `
                     <tr>
                         <td>${index + 1}</td>
                         <td class="labor-id">${labor.laborId}</td>
                         <td>${labor.iqamaNumber}</td>
                         <td class="name-cell" title="${labor.name}">${labor.name}</td>
+                        <td class="role-cell" title="${labor.role || 'Labor'}">${labor.role || 'Labor'}</td>
                         <td>${DateUtils.formatDate(labor.dateOfJoining)}</td>
                 `;
 
-                for (let day = 1; day <= totalDays; day++) {
-                    const dayData = labor.days[day] || { status: 'A', in: '', out: '', hours: '' };
+                allDays.forEach(d => {
+                    const monthDays = labor.months[d.month] || {};
+                    const dayData = monthDays[d.day] || { status: 'A', in: '', out: '', hours: '' };
                     const status = dayData.status;
                     let statusClass = '';
                     
@@ -426,10 +555,12 @@
                         <td class="hours-cell">${dayData.hours || '-'}</td>
                         <td class="${statusClass}">${status}</td>
                     `;
-                }
+                });
+
+                const totalHours = ReportAPI.formatMinutesToHHMM(labor.totalMinutes);
 
                 bodyHtml += `
-                        <td class="hours-total">${labor.totalHours || '-'}</td>
+                        <td class="hours-total">${totalHours || '-'}</td>
                         <td class="total-cell">${labor.presentCount}</td>
                         <td class="total-cell">${labor.halfDayCount}</td>
                         <td class="total-cell">${labor.absentCount}</td>
@@ -454,12 +585,12 @@
             // Summary row
             bodyHtml += `
                 <tr class="summary-row">
-                    <td colspan="5"><strong>GRAND TOTAL</strong></td>
+                    <td colspan="6"><strong>GRAND TOTAL</strong></td>
             `;
 
-            for (let day = 1; day <= totalDays; day++) {
+            allDays.forEach(() => {
                 bodyHtml += `<td></td><td></td><td></td><td></td>`;
-            }
+            });
 
             bodyHtml += `
                     <td>${grandTotalHours}</td>
@@ -482,7 +613,7 @@
 
         // Export Excel (XLSX format with ExcelJS)
         async function exportExcel() {
-            if (reportData.length === 0) {
+            if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
                 Toast.error('No data to export. Generate report first.');
                 return;
             }
@@ -490,8 +621,22 @@
             try {
                 SyncIndicator.show('Generating Excel...');
 
-                const totalDays = reportMeta.totalDays;
-                const shortMonth = getShortMonthName(reportMeta.month);
+                // Calculate total days across all months
+                let allDays = [];
+                allMonthsData.forEach(monthData => {
+                    const totalDays = monthData.meta.totalDays;
+                    const shortMonth = getShortMonthName(monthData.month);
+                    for (let day = 1; day <= totalDays; day++) {
+                        allDays.push({
+                            day,
+                            month: monthData.month,
+                            year: monthData.year,
+                            label: `${day} ${shortMonth}`
+                        });
+                    }
+                });
+
+                const totalDayCols = allDays.length;
 
                 // Create workbook and worksheet
                 const workbook = new ExcelJS.Workbook();
@@ -499,10 +644,10 @@
 
                 // Define colors
                 const colors = {
-                    P: { bg: 'C6F6D5', font: '22543D' },  // Green
-                    H: { bg: 'FEFCBF', font: '975A16' },  // Yellow
-                    A: { bg: 'FED7D7', font: 'C53030' },  // Red
-                    F: { bg: 'E2E8F0', font: '718096' },  // Grey
+                    P: { bg: 'C6F6D5', font: '22543D' },
+                    H: { bg: 'FEFCBF', font: '975A16' },
+                    A: { bg: 'FED7D7', font: 'C53030' },
+                    F: { bg: 'E2E8F0', font: '718096' },
                     header: { bg: '667EEA', font: 'FFFFFF' },
                     subHeader: { bg: '5A67D8', font: 'FFFFFF' },
                     totalCell: { bg: 'EDF2F7', font: '000000' },
@@ -512,17 +657,17 @@
                 };
 
                 // Build header row 1 (day groups)
-                let headerRow1 = ['', '', '', '', ''];
-                for (let day = 1; day <= totalDays; day++) {
-                    headerRow1.push(`${day} ${shortMonth}`, '', '', '');
-                }
+                let headerRow1 = ['', '', '', '', '', ''];
+                allDays.forEach(d => {
+                    headerRow1.push(d.label, '', '', '');
+                });
                 headerRow1.push('Total Hrs', 'P', 'H', 'A', 'F', 'Paid Days', 'Salary');
 
                 // Build header row 2 (sub-headers)
-                let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'DOJ'];
-                for (let day = 1; day <= totalDays; day++) {
+                let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'Role', 'DOJ'];
+                allDays.forEach(() => {
                     headerRow2.push('In', 'Out', 'Hrs', 'St');
-                }
+                });
                 headerRow2.push('', '', '', '', '', '', '');
 
                 // Add header rows
@@ -545,31 +690,77 @@
                     cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
                 });
 
-                // Merge header cells for day groups (4 columns each now)
-                for (let day = 1; day <= totalDays; day++) {
-                    const startCol = 6 + (day - 1) * 4;
+                // Merge header cells for day groups (4 columns each)
+                for (let i = 0; i < totalDayCols; i++) {
+                    const startCol = 7 + i * 4;
                     worksheet.mergeCells(1, startCol, 1, startCol + 3);
                 }
-                // Merge first 5 columns in row 1
-                worksheet.mergeCells(1, 1, 1, 5);
+                // Merge first 6 columns in row 1
+                worksheet.mergeCells(1, 1, 1, 6);
+
+                // Merge data from all months by labor ID
+                const laborMap = new Map();
+                
+                allMonthsData.forEach(monthData => {
+                    monthData.data.forEach(labor => {
+                        if (!laborMap.has(labor.laborId)) {
+                            laborMap.set(labor.laborId, {
+                                laborId: labor.laborId,
+                                iqamaNumber: labor.iqamaNumber,
+                                name: labor.name,
+                                role: labor.role,
+                                dateOfJoining: labor.dateOfJoining,
+                                months: {},
+                                totalMinutes: 0,
+                                presentCount: 0,
+                                halfDayCount: 0,
+                                absentCount: 0,
+                                fridayCount: 0,
+                                totalPaidDays: 0,
+                                calculatedSalary: 0
+                            });
+                        }
+                        
+                        const laborEntry = laborMap.get(labor.laborId);
+                        laborEntry.months[monthData.month] = labor.days;
+                        laborEntry.totalMinutes += labor.totalMinutes || 0;
+                        laborEntry.presentCount += labor.presentCount;
+                        laborEntry.halfDayCount += labor.halfDayCount;
+                        laborEntry.absentCount += labor.absentCount;
+                        laborEntry.fridayCount += labor.fridayCount;
+                        laborEntry.totalPaidDays += labor.totalPaidDays;
+                        laborEntry.calculatedSalary += labor.calculatedSalary;
+                    });
+                });
+
+                // Convert to array and sort
+                const mergedData = Array.from(laborMap.values()).sort((a, b) => {
+                    const aNum = parseInt(a.laborId.replace(/\D/g, '')) || 0;
+                    const bNum = parseInt(b.laborId.replace(/\D/g, '')) || 0;
+                    return aNum - bNum;
+                });
 
                 // Add data rows
-                reportData.forEach((labor, index) => {
+                mergedData.forEach((labor, index) => {
                     let rowData = [
                         index + 1,
                         labor.laborId,
                         labor.iqamaNumber,
                         labor.name,
+                        labor.role || 'Labor',
                         DateUtils.formatDate(labor.dateOfJoining)
                     ];
 
-                    for (let day = 1; day <= totalDays; day++) {
-                        const dayData = labor.days[day] || { status: 'A', in: '', out: '', hours: '' };
+                    allDays.forEach(d => {
+                        const monthDays = labor.months[d.month] || {};
+                        const dayData = monthDays[d.day] || { status: 'A', in: '', out: '', hours: '' };
                         rowData.push(dayData.in || '', dayData.out || '', dayData.hours || '', dayData.status);
-                    }
+                    });
+
+                    const totalHours = ReportAPI.formatMinutesToHHMM(labor.totalMinutes);
 
                     rowData.push(
-                        labor.totalHours || '',
+                        totalHours || '',
                         labor.presentCount,
                         labor.halfDayCount,
                         labor.absentCount,
@@ -590,9 +781,9 @@
                             cell.numFmt = '@';
                         }
 
-                        // Day columns - 4 per day now (In, Out, Hrs, Status)
-                        if (colNumber > 5 && colNumber <= 5 + totalDays * 4) {
-                            const colInDay = (colNumber - 6) % 4;
+                        // Day columns - 4 per day (In, Out, Hrs, Status)
+                        if (colNumber > 6 && colNumber <= 6 + totalDayCols * 4) {
+                            const colInDay = (colNumber - 7) % 4;
                             if (colInDay === 3) {
                                 // Status column
                                 const status = cell.value;
@@ -604,7 +795,7 @@
                         }
 
                         // Summary columns (last 7)
-                        const summaryStart = 6 + totalDays * 4;
+                        const summaryStart = 7 + totalDayCols * 4;
                         
                         // Total Hours
                         if (colNumber === summaryStart) {
@@ -637,17 +828,18 @@
                 worksheet.getColumn(2).width = 8;   // Labor ID
                 worksheet.getColumn(3).width = 12;  // Iqama
                 worksheet.getColumn(4).width = 15;  // Name
-                worksheet.getColumn(5).width = 10;  // DOJ
+                worksheet.getColumn(5).width = 10;  // Role
+                worksheet.getColumn(6).width = 10;  // DOJ
 
-                for (let day = 1; day <= totalDays; day++) {
-                    const startCol = 6 + (day - 1) * 4;
+                for (let i = 0; i < totalDayCols; i++) {
+                    const startCol = 7 + i * 4;
                     worksheet.getColumn(startCol).width = 8;      // In
                     worksheet.getColumn(startCol + 1).width = 8;  // Out
                     worksheet.getColumn(startCol + 2).width = 6;  // Hrs
                     worksheet.getColumn(startCol + 3).width = 4;  // Status
                 }
 
-                const summaryStart = 6 + totalDays * 4;
+                const summaryStart = 7 + totalDayCols * 4;
                 worksheet.getColumn(summaryStart).width = 9;      // Total Hrs
                 worksheet.getColumn(summaryStart + 1).width = 5;  // P
                 worksheet.getColumn(summaryStart + 2).width = 5;  // H
@@ -656,8 +848,18 @@
                 worksheet.getColumn(summaryStart + 5).width = 9;  // Paid Days
                 worksheet.getColumn(summaryStart + 6).width = 10; // Salary
 
-                // Freeze first 2 rows and first 5 columns
-                worksheet.views = [{ state: 'frozen', xSplit: 5, ySplit: 2 }];
+                // Freeze first 2 rows and first 6 columns
+                worksheet.views = [{ state: 'frozen', xSplit: 6, ySplit: 2 }];
+
+                // Generate filename with month range
+                const selectedMonths = getSelectedMonths();
+                const year = document.getElementById('yearSelect').value;
+                let filename;
+                if (selectedMonths.length === 1) {
+                    filename = `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}.xlsx`;
+                } else {
+                    filename = `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}-${String(selectedMonths[selectedMonths.length - 1]).padStart(2, '0')}.xlsx`;
+                }
 
                 // Generate file
                 const buffer = await workbook.xlsx.writeBuffer();
@@ -665,7 +867,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `3PL_Billing_${reportMeta.year}_${String(reportMeta.month).padStart(2, '0')}.xlsx`;
+                a.download = filename;
                 a.click();
                 URL.revokeObjectURL(url);
 
@@ -681,9 +883,18 @@
 
         // Print report
         function printReport() {
-            if (reportData.length === 0) {
+            if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
                 Toast.error('No data to print. Generate report first.');
                 return;
+            }
+
+            const selectedMonths = getSelectedMonths();
+            const year = document.getElementById('yearSelect').value;
+            let title;
+            if (selectedMonths.length === 1) {
+                title = `${getMonthName(selectedMonths[0])} ${year}`;
+            } else {
+                title = `${getMonthName(selectedMonths[0])} - ${getMonthName(selectedMonths[selectedMonths.length - 1])} ${year}`;
             }
 
             const printContent = document.getElementById('reportContainer').innerHTML;
@@ -709,7 +920,7 @@
                         .paid-cell { background: #c6f6d5; font-weight: bold; }
                         .salary-cell { background: #faf5ff; font-weight: bold; }
                         .summary-row td { background: #667eea !important; color: white !important; }
-                        .labor-id, .name-cell { text-align: left; }
+                        .labor-id, .name-cell, .role-cell { text-align: left; }
                         .time-cell, .hours-cell { font-size: 6px; }
                         @media print {
                             @page { size: landscape; margin: 0.2cm; }
@@ -717,7 +928,7 @@
                     </style>
                 </head>
                 <body>
-                    <h2 style="text-align: center; font-size: 11px;">3PL Monthly Billing Report - ${getMonthName(reportMeta.month)} ${reportMeta.year}</h2>
+                    <h2 style="text-align: center; font-size: 11px;">3PL Monthly Billing Report - ${title}</h2>
                     ${printContent}
                 </body>
                 </html>
@@ -730,6 +941,7 @@
         // Initialize
         initYearDropdown();
         setCurrentMonth();
+        setupMonthCheckboxes();
         loadDepartments();
     </script>
 </body>
