@@ -271,7 +271,7 @@
                             <th>Labor ID</th>
                             <th>Name</th>
                             <th>Role</th>
-                            <th>Department</th>
+                            <th>Location</th>
                             <th>Login</th>
                             <th>Logout</th>
                             <th>Hours</th>
@@ -607,7 +607,7 @@
                         <td><strong>${record.labor_id}</strong></td>
                         <td>${record.laborName || 'Unknown'} ${noPunchBadge}</td>
                         <td>${record.role || 'Labor'}</td>
-                        <td>${record.departmentName || '-'}</td>
+                        <td>${record.punchLocation || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
                         <td>${record.total_hours ? parseFloat(record.total_hours).toFixed(1) + 'h' : '-'}</td>
