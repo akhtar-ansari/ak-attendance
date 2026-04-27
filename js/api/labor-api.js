@@ -158,6 +158,8 @@ const LaborAPI = {
                     date_of_joining: laborer.dateOfJoining,
                     department_id: laborer.departmentId,
                     status: laborer.status || 'active',
+                    role: laborer.role || 'Labor',
+                    monthly_salary: laborer.monthlySalary || 3000,
                     face_enrolled: false,
                     needs_reenrollment: false,
                     low_confidence_count: 0,
@@ -204,6 +206,8 @@ const LaborAPI = {
             if (updates.needsReenrollment !== undefined) updateObj.needs_reenrollment = updates.needsReenrollment;
             if (updates.lowConfidenceCount !== undefined) updateObj.low_confidence_count = updates.lowConfidenceCount;
             if (updates.lastLowConfidenceDate) updateObj.last_low_confidence_date = updates.lastLowConfidenceDate;
+            if (updates.role !== undefined) updateObj.role = updates.role;
+if (updates.monthlySalary !== undefined) updateObj.monthly_salary = updates.monthlySalary;
 
             const { data, error } = await supabaseClient
                 .from('laborers')
