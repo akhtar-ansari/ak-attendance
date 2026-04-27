@@ -1,4 +1,4 @@
-// AK Attendance - Report API v4 (with Complete Attendance, Absent Streak)
+// AK Attendance - Report API v5 (with Punch Location)
 const ReportAPI = {
     // Get daily attendance summary (original - only punched laborers)
     async getDailyAttendance(fromDate, toDate, departmentId = null) {
@@ -72,6 +72,31 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
+            // 2b. Get first punch location for each labor+date
+            let punchQuery = supabaseClient
+                .from('punch_records')
+                .select('labor_id, date, time, location_name')
+                .eq('client_id', clientId)
+                .gte('date', fromDate)
+                .lte('date', toDate)
+                .order('time', { ascending: true });
+
+            if (departmentFilter) {
+                punchQuery = punchQuery.eq('department_id', departmentFilter);
+            }
+
+            const { data: punches, error: punchError } = await punchQuery;
+            if (punchError) throw punchError;
+
+            // Build first punch location map (first punch per labor+date)
+            const punchLocationMap = {};
+            (punches || []).forEach(p => {
+                const key = `${p.labor_id}_${p.date}`;
+                if (!punchLocationMap[key]) {
+                    punchLocationMap[key] = p.location_name || '';
+                }
+            });
+
             // 3. Get departments for names
             const { data: departments } = await supabaseClient
                 .from('departments')
@@ -114,6 +139,7 @@ const ReportAPI = {
                             role: labor.role || 'Labor',
                             iqamaNumber: labor.iqama_number,
                             departmentName: deptMap[labor.department_id] || '-',
+                            punchLocation: punchLocationMap[key] || '',
                             hasRecord: true,
                             isFriday: dayOfWeek === 5
                         });
@@ -137,6 +163,7 @@ const ReportAPI = {
                             role: labor.role || 'Labor',
                             iqamaNumber: labor.iqama_number,
                             departmentName: deptMap[labor.department_id] || '-',
+                            punchLocation: '',
                             hasRecord: false,
                             isFriday: dayOfWeek === 5
                         });
@@ -665,7 +692,7 @@ const ReportAPI = {
                     name: laborer.name,
                     dateOfJoining: laborer.date_of_joining,
                     lastWorkingDate: laborer.last_working_date,
-                    role: laborer.role || 'labor',
+                    role: laborer.role || 'Labor',
                     monthlySalary: monthlySalary,
                     days,
                     presentCount,
