@@ -42,16 +42,16 @@ const EnrollmentAPI = {
             expiresAt.setHours(expiresAt.getHours() + 1);
 
             const { data, error } = await supabaseClient
-    .from('enrollment_links')
-    .insert({
-        token: token,
-        labor_id: laborId,
-        client_id: clientId,
-        created_by: session.name,
-        expires_at: expiresAt.toISOString(),
-        status: 'pending',
-        labor_name: labor.name
-    })
+                .from('enrollment_links')
+                .insert({
+                    token: token,
+                    labor_id: laborId,
+                    client_id: clientId,
+                    created_by: session.name,
+                    expires_at: expiresAt.toISOString(),
+                    status: 'pending',
+                    labor_name: labor.name
+                })
                 .select()
                 .single();
 
@@ -61,8 +61,8 @@ const EnrollmentAPI = {
             const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '');
             const enrollUrl = `${baseUrl}/enroll-self.html?token=${token}`;
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 data: {
                     token,
                     url: enrollUrl,
@@ -106,8 +106,8 @@ const EnrollmentAPI = {
                 return { success: false, error: 'Link has already been used' };
             }
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 data: {
                     id: data.id,
                     laborId: data.labor_id,
@@ -153,18 +153,18 @@ const EnrollmentAPI = {
     },
 
     // Get pending enrollments (admin)
-async getPendingEnrollments() {
-    try {
-        const clientId = AUTH.getClientId();
+    async getPendingEnrollments() {
+        try {
+            const clientId = AUTH.getClientId();
 
-        const { data, error } = await supabaseClient
-            .from('enrollment_links')
-            .select('*')
-            .eq('client_id', clientId)
-            .eq('status', 'submitted')
-            .order('submitted_at', { ascending: false });
+            const { data, error } = await supabaseClient
+                .from('enrollment_links')
+                .select('*')
+                .eq('client_id', clientId)
+                .eq('status', 'submitted')
+                .order('submitted_at', { ascending: false });
 
-        if (error) throw error;
+            if (error) throw error;
 
             return { success: true, data: data || [] };
         } catch (error) {
@@ -194,84 +194,68 @@ async getPendingEnrollments() {
     },
 
     // Approve enrollment (admin)
-async approveEnrollment(enrollmentId) {
-    try {
-        const clientId = AUTH.getClientId();
+    // Saves face_descriptor to laborers, deletes photo from storage, deletes enrollment row
+    async approveEnrollment(enrollmentId) {
+        try {
+            const clientId = AUTH.getClientId();
 
-        // Get the enrollment record
-        const { data: enrollment, error: fetchError } = await supabaseClient
-            .from('enrollment_links')
-            .select('*')
-            .eq('id', enrollmentId)
-            .eq('client_id', clientId)
-            .eq('status', 'submitted')
-            .single();
+            // 1. Get the enrollment record
+            const { data: enrollment, error: fetchError } = await supabaseClient
+                .from('enrollment_links')
+                .select('*')
+                .eq('id', enrollmentId)
+                .eq('client_id', clientId)
+                .eq('status', 'submitted')
+                .single();
 
-        if (fetchError || !enrollment) {
-            throw new Error('Enrollment not found');
-        }
-
-        // Update laborer with face data
-        const { error: laborError } = await supabaseClient
-            .from('laborers')
-            .update({
-                face_descriptor: enrollment.face_descriptor,
-                face_photo_url: enrollment.photo_url,
-                face_enrolled: true,
-                needs_reenrollment: false
-            })
-            .eq('client_id', clientId)
-            .eq('labor_id', enrollment.labor_id);
-
-        if (laborError) throw laborError;
-
-        // Delete photo from storage
-        if (enrollment.photo_url) {
-            try {
-                const url = new URL(enrollment.photo_url);
-                const pathParts = url.pathname.split('/storage/v1/object/public/punch-photos/');
-                if (pathParts[1]) {
-                    await supabaseClient.storage
-                        .from('punch-photos')
-                        .remove([pathParts[1]]);
-                }
-            } catch (e) {
-                console.warn('Failed to delete enrollment photo:', e);
+            if (fetchError || !enrollment) {
+                throw new Error('Enrollment not found');
             }
+
+            // 2. Save face descriptor to laborers (no photo URL saved)
+            const { error: laborError } = await supabaseClient
+                .from('laborers')
+                .update({
+                    face_descriptor: enrollment.face_descriptor,
+                    face_enrolled: true,
+                    needs_reenrollment: false,
+                    face_photo_url: null
+                })
+                .eq('client_id', clientId)
+                .eq('labor_id', enrollment.labor_id);
+
+            if (laborError) throw laborError;
+
+            // 3. Delete photo from Supabase Storage
+            if (enrollment.photo_url) {
+                try {
+                    const url = new URL(enrollment.photo_url);
+                    const pathParts = url.pathname.split('/storage/v1/object/public/punch-photos/');
+                    if (pathParts[1]) {
+                        await supabaseClient.storage
+                            .from('punch-photos')
+                            .remove([pathParts[1]]);
+                    }
+                } catch (e) {
+                    console.warn('Failed to delete enrollment photo from storage:', e);
+                    // Non-fatal - continue with deletion of DB record
+                }
+            }
+
+            // 4. Delete the enrollment record entirely
+            const { error: deleteError } = await supabaseClient
+                .from('enrollment_links')
+                .delete()
+                .eq('id', enrollmentId);
+
+            if (deleteError) throw deleteError;
+
+            return { success: true };
+        } catch (error) {
+            console.error('Approve enrollment error:', error);
+            return { success: false, error: error.message };
         }
-
-        // Mark enrollment as approved and clear photo_url
-        const { error: updateError } = await supabaseClient
-            .from('enrollment_links')
-            .update({ 
-                status: 'approved',
-                photo_url: null
-            })
-            .eq('id', enrollmentId);
-
-        if (updateError) throw updateError;
-
-        return { success: true };
-    } catch (error) {
-        console.error('Approve enrollment error:', error);
-        return { success: false, error: error.message };
-    }
-},
-
-        // Mark enrollment as approved
-        const { error: updateError } = await supabaseClient
-            .from('enrollment_links')
-            .update({ status: 'approved' })
-            .eq('id', enrollmentId);
-
-        if (updateError) throw updateError;
-
-        return { success: true };
-    } catch (error) {
-        console.error('Approve enrollment error:', error);
-        return { success: false, error: error.message };
-    }
-},
+    },
 
     // Reject enrollment (admin)
     async rejectEnrollment(enrollmentId) {
@@ -297,7 +281,7 @@ async approveEnrollment(enrollmentId) {
     async uploadPhoto(file, laborId) {
         try {
             const fileName = `enrollment/${laborId}_${Date.now()}.jpg`;
-            
+
             const { data, error } = await supabaseClient.storage
                 .from('punch-photos')
                 .upload(fileName, file, {
