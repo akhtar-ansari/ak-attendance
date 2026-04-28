@@ -563,6 +563,20 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
+            // Get holidays for this month
+            const { data: holidaysData } = await supabaseClient
+                .from('holidays')
+                .select('date, name')
+                .eq('client_id', AUTH.getClientId())
+                .gte('date', startDate)
+                .lte('date', endDate);
+
+            // Build holiday map: key = date string, value = holiday name
+            const holidayMap = {};
+            (holidaysData || []).forEach(h => {
+                holidayMap[h.date] = h.name;
+            });
+
             // Build attendance map with in/out times
             const attendanceMap = {};
             (attendance || []).forEach(a => {
@@ -586,6 +600,7 @@ const ReportAPI = {
                 let halfDayCount = 0;
                 let absentCount = 0;
                 let fridayCount = 0;
+                let holidayCount = 0;
                 let totalMinutes = 0;
 
                 for (let day = 1; day <= lastDay; day++) {
@@ -610,6 +625,68 @@ const ReportAPI = {
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
+                    } else if (holidayMap[dateStr]) {
+                        // National Holiday - sandwich rule: prev working day absent + next working day absent = NH absent
+                        // Find previous working day (skip Friday)
+                        let prevDay = day - 1;
+                        while (prevDay >= 1) {
+                            const prevDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`);
+                            if (prevDate.getDay() !== 5) break;
+                            prevDay--;
+                        }
+                        // Find next working day (skip Friday)
+                        let nextDay = day + 1;
+                        while (nextDay <= lastDay) {
+                            const nextDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`);
+                            if (nextDate.getDay() !== 5) break;
+                            nextDay++;
+                        }
+
+                        const prevDateStr = prevDay >= 1
+                            ? `${year}-${String(month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`
+                            : null;
+                        const nextDateStr = nextDay <= lastDay
+                            ? `${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`
+                            : null;
+
+                        // Get prev day status
+                        let prevStatus = 'A';
+                        if (prevDateStr) {
+                            const prevKey = `${laborer.labor_id}_${prevDateStr}`;
+                            const prevRecord = attendanceMap[prevKey];
+                            if (prevRecord && prevRecord.firstIn && prevRecord.lastOut) {
+                                const prevMinutes = this.calculateHours(prevRecord.firstIn, prevRecord.lastOut);
+                                prevStatus = this.determineStatus(prevMinutes, minHours);
+                            } else if (prevRecord && prevRecord.status) {
+                                prevStatus = prevRecord.status;
+                            }
+                        }
+
+                        // Get next day status
+                        let nextStatus = 'A';
+                        if (nextDateStr) {
+                            const nextKey = `${laborer.labor_id}_${nextDateStr}`;
+                            const nextRecord = attendanceMap[nextKey];
+                            if (nextRecord && nextRecord.firstIn && nextRecord.lastOut) {
+                                const nextMinutes = this.calculateHours(nextRecord.firstIn, nextRecord.lastOut);
+                                nextStatus = this.determineStatus(nextMinutes, minHours);
+                            } else if (nextRecord && nextRecord.status) {
+                                nextStatus = nextRecord.status;
+                            }
+                        }
+
+                        if (prevStatus === 'A' && nextStatus === 'A') {
+                            status = 'A';
+                            absentCount++;
+                        } else {
+                            status = 'NH';
+                            holidayCount++;
+                        }
+                        // Clear in/out for holiday
+                        firstIn = null;
+                        lastOut = null;
+                        workedMinutes = 0;
+
                     } else if (isFriday) {
                         // Sandwich rule: Thu Absent + Sat Absent = Fri Absent
                         const thursdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day - 1).padStart(2, '0')}`;
@@ -680,8 +757,8 @@ const ReportAPI = {
                     };
                 }
 
-                // Calculate total paid days: P*1 + F*1 + H*0.5
-                const totalPaidDays = presentCount + fridayCount + (halfDayCount * 0.5);
+                // Calculate total paid days: P*1 + F*1 + NH*1 + H*0.5
+                const totalPaidDays = presentCount + fridayCount + holidayCount + (halfDayCount * 0.5);
 
                 // Calculate salary: (totalPaidDays / 30) * monthlySalary
                 const calculatedSalary = Math.round((totalPaidDays / 30) * monthlySalary);
@@ -699,6 +776,7 @@ const ReportAPI = {
                     halfDayCount,
                     absentCount,
                     fridayCount,
+                    holidayCount,
                     totalPaidDays,
                     totalHours: this.formatMinutesToHHMM(totalMinutes),
                     totalMinutes,
@@ -906,6 +984,7 @@ const ReportAPI = {
         
         return now < nextMonth;
     },
+
     // Check if a date is frozen
 async isDateFrozen(date) {
     try {
