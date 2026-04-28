@@ -19,6 +19,7 @@
         .tile-red { background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%); }
         .tile-teal { background: linear-gradient(135deg, #38b2ac 0%, #319795 100%); }
         .tile-pink { background: linear-gradient(135deg, #ed64a6 0%, #d53f8c 100%); }
+        .tile-indigo { background: linear-gradient(135deg, #5a67d8 0%, #434190 100%); }
         .stats-section {
             background: #f7fafc;
             border-radius: 12px;
@@ -140,10 +141,11 @@
                 { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: `punch/index.html?client=${session.clientCode}`, class: 'tile-orange', target: '_blank' }
             );
 
-            // Admin only - 3PL Billing
+            // Admin only tiles
             if (isAdmin) {
                 tiles.push(
-                    { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' }
+                    { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
+                    { title: 'Overtime', desc: 'Submit & track OT', icon: '🕐', link: 'attendance/overtime.html', class: 'tile-indigo' }
                 );
             }
 
@@ -230,12 +232,10 @@
             
             let actions = [];
             
-            // Admin and Supervisor can add laborers (filtered by their department)
             actions.push(
                 `<button class="btn btn-primary" onclick="location.href='labor/master.html'">➕ Add New Labor</button>`
             );
             
-            // Admin only - Import
             if (isAdmin) {
                 actions.push(
                     `<button class="btn btn-success" onclick="location.href='labor/import.html'">📤 Import Laborers</button>`
@@ -281,7 +281,6 @@
                     if (result.success) {
                         console.log(`Photo cleanup done. Cleaned: ${result.cleaned}`);
                         
-                        // Update last cleanup date
                         await supabaseClient
                             .from('settings')
                             .update({ value: today.toISOString().split('T')[0] })
