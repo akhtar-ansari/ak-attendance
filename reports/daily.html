@@ -54,8 +54,6 @@
             background: #a0aec0;
             cursor: not-allowed;
         }
-        
-        /* LOP Styles */
         .lop-checkbox {
             width: 18px;
             height: 18px;
@@ -103,11 +101,6 @@
         .reason-btn:hover {
             background: #e2e8f0;
             border-radius: 4px;
-        }
-        .approved-info {
-            font-size: 11px;
-            color: #38a169;
-            margin-top: 3px;
         }
         .lop-inline {
             display: flex;
@@ -166,6 +159,31 @@
             padding: 2px 6px;
             border-radius: 3px;
         }
+        .freeze-btn {
+            background: #805ad5;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .freeze-btn:hover {
+            background: #6b46c1;
+        }
+        .frozen-banner {
+            background: #805ad5;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .frozen-banner .icon {
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -221,7 +239,15 @@
                 <div class="action-buttons" style="margin-top: 15px;">
                     <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
                     <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
+                    <button type="button" class="freeze-btn" id="freezeBtn" onclick="freezeSelectedDate()" style="display: none;">🔒 Freeze Day</button>
                 </div>
+            </div>
+
+            <!-- Frozen Banner -->
+            <div class="frozen-banner" id="frozenBanner" style="display: none;">
+                <span class="icon">🔒</span>
+                <span>This date is frozen. No changes can be made.</span>
+                <span id="frozenByInfo" style="margin-left: auto; font-size: 12px;"></span>
             </div>
 
             <!-- Summary -->
@@ -283,7 +309,7 @@
                     </thead>
                     <tbody id="reportTable">
                         <tr>
-                            <td colspan="12" class="text-center p-20 text-muted">
+                            <td colspan="13" class="text-center p-20 text-muted">
                                 Select date range and click "Generate Report"
                             </td>
                         </tr>
@@ -300,9 +326,7 @@
                 <h2 id="photoModalTitle">Punch Photos</h2>
                 <button type="button" class="modal-close" onclick="closePhotoModal()">&times;</button>
             </div>
-            <div class="modal-body" id="photoModalBody">
-                <!-- Photos will be loaded here -->
-            </div>
+            <div class="modal-body" id="photoModalBody"></div>
         </div>
     </div>
 
@@ -334,8 +358,33 @@
                 <h2>LOP Details</h2>
                 <button type="button" class="modal-close" onclick="closeReasonModal()">&times;</button>
             </div>
-            <div class="modal-body" id="reasonModalBody">
-                <!-- Reason details will be loaded here -->
+            <div class="modal-body" id="reasonModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Freeze Confirm Modal -->
+    <div class="modal-overlay" id="freezeModal">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>🔒 Freeze Attendance</h2>
+                <button type="button" class="modal-close" onclick="closeFreezeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <p style="color: #92400e; margin: 0;"><strong>⚠️ Warning:</strong> This action cannot be undone!</p>
+                </div>
+                <p>You are about to freeze attendance for:</p>
+                <p style="font-size: 20px; font-weight: bold; text-align: center; margin: 20px 0;" id="freezeDateDisplay">-</p>
+                <p style="color: #666;">After freezing:</p>
+                <ul style="color: #666; margin-left: 20px;">
+                    <li>No LOP approvals can be made</li>
+                    <li>No changes to attendance records</li>
+                    <li>Cannot be undone by anyone</li>
+                </ul>
+                <div class="action-buttons" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeFreezeModal()">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmFreeze()">🔒 Freeze Permanently</button>
+                </div>
             </div>
         </div>
     </div>
@@ -355,7 +404,6 @@
     <script src="../js/api/report-api.js"></script>
 
     <script>
-        // Require login
         if (!AUTH.requireLogin()) {
             window.location.href = '../index.html';
         }
@@ -370,44 +418,36 @@
         let selectedItems = new Set();
         let pendingApproveRecord = null;
         let pendingBulkApprove = false;
+        let frozenDates = {};
+        let currentDateIsFrozen = false;
 
-        // Set default dates
         function setDefaultDates() {
             const today = new Date();
             document.getElementById('fromDate').value = DateUtils.formatForInput(today);
             document.getElementById('toDate').value = DateUtils.formatForInput(today);
         }
 
-        // Load filter options
         async function loadFilters() {
             try {
                 SyncIndicator.show('Loading...');
-
-                // Load departments
                 const deptResult = await DepartmentAPI.getActive();
                 if (deptResult.success) {
                     departments = deptResult.data;
                     const deptSelect = document.getElementById('departmentFilter');
                     deptSelect.innerHTML = '<option value="">All Departments</option>';
-                    
                     departments.forEach(dept => {
                         if (session.role === 'admin' || dept.id === session.departmentId) {
                             deptSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
                         }
                     });
                 }
-
-                // Load laborers
                 const laborResult = await LaborAPI.getAll();
                 if (laborResult.success) {
                     laborers = laborResult.data;
                 }
-
-                // Hide select all checkbox if not admin
                 if (!isAdmin) {
                     document.getElementById('selectAll').style.display = 'none';
                 }
-
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -415,24 +455,23 @@
             }
         }
 
-        // Check if date is within approval window
+        function isDateFrozen(dateStr) {
+            return !!frozenDates[dateStr];
+        }
+
         function isDateApprovable(dateStr) {
+            if (isDateFrozen(dateStr)) return false;
             const recordDate = new Date(dateStr);
             const today = new Date();
-            
-            // Get 1st of next month
             const nextMonth1st = new Date(today.getFullYear(), today.getMonth() + 1, 1);
             nextMonth1st.setHours(23, 59, 59, 999);
-            
             return recordDate <= nextMonth1st;
         }
 
-        // Generate unique key for record
         function getRecordKey(record) {
             return `${record.labor_id}_${record.date}`;
         }
 
-        // Generate report
         async function generateReport() {
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
@@ -445,7 +484,6 @@
                 Toast.error('Please select date range');
                 return;
             }
-
             if (new Date(fromDate) > new Date(toDate)) {
                 Toast.error('From date cannot be after To date');
                 return;
@@ -456,17 +494,38 @@
                 selectedItems.clear();
                 updateBulkActions();
 
-                // Use getCompleteAttendance to get ALL active laborers
-                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, departmentId);
-
-                if (!result.success) {
-                    throw new Error(result.error);
+                const frozenResult = await ReportAPI.getFrozenDates(fromDate, toDate);
+                frozenDates = {};
+                if (frozenResult.success) {
+                    frozenResult.data.forEach(f => {
+                        frozenDates[f.date] = { frozen_by: f.frozen_by, frozen_at: f.frozen_at };
+                    });
                 }
+
+                const isSingleDate = fromDate === toDate;
+                currentDateIsFrozen = isSingleDate && isDateFrozen(fromDate);
+
+                if (isAdmin && isSingleDate && !currentDateIsFrozen) {
+                    document.getElementById('freezeBtn').style.display = 'inline-block';
+                } else {
+                    document.getElementById('freezeBtn').style.display = 'none';
+                }
+
+                if (currentDateIsFrozen) {
+                    const freezeInfo = frozenDates[fromDate];
+                    document.getElementById('frozenBanner').style.display = 'flex';
+                    document.getElementById('frozenByInfo').textContent = 
+                        `Frozen by ${freezeInfo.frozen_by} on ${new Date(freezeInfo.frozen_at).toLocaleString()}`;
+                } else {
+                    document.getElementById('frozenBanner').style.display = 'none';
+                }
+
+                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, departmentId);
+                if (!result.success) throw new Error(result.error);
 
                 reportData = result.data;
                 filteredData = [...reportData];
 
-                // Filter by labor ID, Iqama, or Name search
                 if (laborSearch) {
                     filteredData = filteredData.filter(r => {
                         return r.labor_id.toLowerCase().includes(laborSearch) || 
@@ -475,7 +534,6 @@
                     });
                 }
 
-                // Filter by status
                 if (statusFilter === 'present') {
                     filteredData = filteredData.filter(r => r.final_status === 'P');
                 } else if (statusFilter === 'absent') {
@@ -486,7 +544,6 @@
                     filteredData = filteredData.filter(r => !r.hasRecord && r.final_status === 'A');
                 }
 
-                // Filter by LOP status
                 if (lopFilter === 'pending') {
                     filteredData = filteredData.filter(r => 
                         (r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by
@@ -495,7 +552,6 @@
                     filteredData = filteredData.filter(r => r.approved_by);
                 }
 
-                // Calculate summary
                 const presentCount = filteredData.filter(r => r.final_status === 'P').length;
                 const halfDayCount = filteredData.filter(r => r.final_status === 'H').length;
                 const absentCount = filteredData.filter(r => r.final_status === 'A').length;
@@ -505,7 +561,6 @@
                 const totalHours = recordsWithHours.reduce((sum, r) => sum + parseFloat(r.total_hours), 0);
                 const avgHours = recordsWithHours.length > 0 ? (totalHours / recordsWithHours.length).toFixed(1) : 0;
 
-                // Update summary
                 document.getElementById('totalRecords').textContent = filteredData.length;
                 document.getElementById('presentCount').textContent = presentCount;
                 document.getElementById('halfDayCount').textContent = halfDayCount;
@@ -514,9 +569,7 @@
                 document.getElementById('avgHours').textContent = avgHours;
                 document.getElementById('summarySection').style.display = 'grid';
 
-                // Render table
                 renderTable();
-
                 SyncIndicator.hide();
                 Toast.success(`Found ${filteredData.length} records`);
 
@@ -527,18 +580,11 @@
             }
         }
 
-        // Render table
         function renderTable() {
             const tbody = document.getElementById('reportTable');
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="12" class="text-center p-20 text-muted">
-                            No records found for selected criteria
-                        </td>
-                    </tr>
-                `;
+                tbody.innerHTML = `<tr><td colspan="13" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
                 return;
             }
 
@@ -549,20 +595,18 @@
                 
                 const autoStatusClass = `status-${record.auto_status}`;
                 const autoStatusText = record.auto_status || 'A';
-
                 const finalStatusClass = `status-${record.final_status}`;
                 const finalStatusText = record.final_status || 'A';
 
-                // Can approve if: (H or A status) AND not already approved AND date is approvable AND not Friday
+                const dateFrozen = isDateFrozen(record.date);
                 const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') && 
                                    !record.approved_by && 
                                    isDateApprovable(record.date) &&
-                                   !record.isFriday;
+                                   !record.isFriday &&
+                                   !dateFrozen;
                 
                 const wasApproved = record.approved_by && record.final_status === 'P';
-                const isFrozen = !isDateApprovable(record.date);
                 
-                // Checkbox logic
                 let checkboxHtml = '';
                 if (isAdmin && canApprove) {
                     const isChecked = selectedItems.has(recordKey) ? 'checked' : '';
@@ -571,33 +615,32 @@
                     checkboxHtml = `<input type="checkbox" class="lop-checkbox" disabled>`;
                 }
 
-                // LOP Action column
                 let lopActionHtml = '';
                 if (record.isFriday) {
                     lopActionHtml = '<span class="frozen-badge">Friday</span>';
+                } else if (dateFrozen) {
+                    lopActionHtml = '<span class="frozen-badge">🔒 Frozen</span>';
                 } else if (wasApproved) {
                     lopActionHtml = `
                         <div class="lop-inline">
                             <span class="badge status-P">${record.auto_status} → P</span>
                             <button class="reason-btn" onclick="viewReason('${recordKey}')" title="View reason">💬</button>
                             <span style="font-size: 11px; color: #38a169; white-space: nowrap;">by ${record.approved_by}</span>
-                            ${isAdmin && !isFrozen && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+                            ${isAdmin && !dateFrozen && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
                         </div>
                     `;
                 } else if (canApprove) {
                     lopActionHtml = `<button class="approve-btn" onclick="openApproveModal('${recordKey}')">✓ Approve</button>`;
-                } else if (isFrozen && (record.auto_status === 'H' || record.auto_status === 'A')) {
-                    lopActionHtml = `<span class="frozen-badge">🔒 Frozen</span>`;
+                } else if (!isDateApprovable(record.date) && (record.auto_status === 'H' || record.auto_status === 'A')) {
+                    lopActionHtml = `<span class="frozen-badge">🔒 Closed</span>`;
                 } else {
                     lopActionHtml = '-';
                 }
 
-                // Photo button - disable for no-punch records
                 const photoBtn = record.hasRecord 
                     ? `<button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">📷 View</button>`
                     : `<button class="photo-btn" disabled title="No punch">📷 -</button>`;
 
-                // No punch indicator
                 const noPunchBadge = isNoPunch ? '<span class="no-punch-badge">No Punch</span>' : '';
 
                 return `
@@ -622,8 +665,33 @@
             updateSelectAllState();
         }
 
-        // ============ SELECTION FUNCTIONS ============
+        // ============ FREEZE FUNCTIONS ============
+        function freezeSelectedDate() {
+            const fromDate = document.getElementById('fromDate').value;
+            document.getElementById('freezeDateDisplay').textContent = DateUtils.formatDate(fromDate);
+            document.getElementById('freezeModal').classList.add('active');
+        }
 
+        function closeFreezeModal() {
+            document.getElementById('freezeModal').classList.remove('active');
+        }
+
+        async function confirmFreeze() {
+            const fromDate = document.getElementById('fromDate').value;
+            try {
+                SyncIndicator.show('Freezing...');
+                const result = await ReportAPI.freezeDate(fromDate);
+                if (!result.success) throw new Error(result.error);
+                closeFreezeModal();
+                Toast.success('Date frozen successfully!');
+                await generateReport();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to freeze: ' + error.message);
+            }
+        }
+
+        // ============ SELECTION FUNCTIONS ============
         function toggleSelect(key) {
             if (selectedItems.has(key)) {
                 selectedItems.delete(key);
@@ -692,7 +760,6 @@
         }
 
         // ============ APPROVE FUNCTIONS ============
-
         function getRecordByKey(key) {
             return filteredData.find(r => getRecordKey(r) === key);
         }
@@ -728,7 +795,6 @@
             pendingApproveRecord = null;
             pendingBulkApprove = true;
             
-            // Count how many are no-punch
             let noPunchCount = 0;
             selectedItems.forEach(key => {
                 const record = getRecordByKey(key);
@@ -767,7 +833,6 @@
                 SyncIndicator.show('Approving...');
 
                 if (pendingBulkApprove) {
-                    // Bulk approve
                     let successCount = 0;
                     let errorCount = 0;
 
@@ -777,10 +842,8 @@
 
                         let result;
                         if (record.id) {
-                            // Has existing record
                             result = await ReportAPI.approveLOP(record.id, reason);
                         } else {
-                            // No record - create new
                             result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
                         }
 
@@ -798,27 +861,21 @@
                     }
                     clearSelection();
                 } else {
-                    // Single approve
                     const record = pendingApproveRecord;
                     let result;
 
                     if (record.id) {
-                        // Has existing record
                         result = await ReportAPI.approveLOP(record.id, reason);
                     } else {
-                        // No record - create new
                         result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
                     }
                     
-                    if (!result.success) {
-                        throw new Error(result.error);
-                    }
-
+                    if (!result.success) throw new Error(result.error);
                     Toast.success('LOP approved successfully');
                 }
 
                 closeApproveModal();
-                await generateReport(); // Refresh data
+                await generateReport();
 
             } catch (error) {
                 SyncIndicator.hide();
@@ -827,22 +884,14 @@
         }
 
         async function undoApproval(recordId) {
-            if (!confirm('Are you sure you want to undo this approval?')) {
-                return;
-            }
+            if (!confirm('Are you sure you want to undo this approval?')) return;
 
             try {
                 SyncIndicator.show('Undoing...');
-                
                 const result = await ReportAPI.undoLOP(recordId, 'A');
-                
-                if (!result.success) {
-                    throw new Error(result.error);
-                }
-
+                if (!result.success) throw new Error(result.error);
                 Toast.success('Approval undone');
-                await generateReport(); // Refresh data
-
+                await generateReport();
             } catch (error) {
                 SyncIndicator.hide();
                 Toast.error('Failed to undo: ' + error.message);
@@ -850,7 +899,6 @@
         }
 
         // ============ VIEW REASON ============
-
         function viewReason(recordKey) {
             const record = getRecordByKey(recordKey);
             if (!record) return;
@@ -889,16 +937,11 @@
         }
 
         // ============ PHOTO MODAL ============
-
         async function viewPhotos(laborId, date) {
             try {
                 SyncIndicator.show('Loading photos...');
-
                 const result = await ReportAPI.getPunchPhotos(laborId, date);
-
-                if (!result.success) {
-                    throw new Error(result.error);
-                }
+                if (!result.success) throw new Error(result.error);
 
                 const photos = result.data;
                 const record = filteredData.find(r => r.labor_id === laborId && r.date === date);
@@ -925,18 +968,10 @@
                                 }
                             </div>
                             <div>
-                                <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">
-                                    🕐 Punch
-                                </div>
-                                <div style="color: #666; font-size: 14px;">
-                                    Time: ${DateUtils.formatTime(punch.time)}
-                                </div>
-                                <div style="color: #666; font-size: 14px;">
-                                    Location: ${punch.location_name || '-'}
-                                </div>
-                                <div style="color: #666; font-size: 14px;">
-                                    Confidence: ${punch.confidence || '-'}%
-                                </div>
+                                <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">🕐 Punch</div>
+                                <div style="color: #666; font-size: 14px;">Time: ${DateUtils.formatTime(punch.time)}</div>
+                                <div style="color: #666; font-size: 14px;">Location: ${punch.location_name || '-'}</div>
+                                <div style="color: #666; font-size: 14px;">Confidence: ${punch.confidence || '-'}%</div>
                             </div>
                         </div>
                     `).join('');
@@ -956,7 +991,6 @@
         }
 
         // ============ EXPORT CSV ============
-
         function exportCSV() {
             if (filteredData.length === 0) {
                 Toast.error('No data to export. Generate report first.');
