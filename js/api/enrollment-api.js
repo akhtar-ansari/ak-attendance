@@ -213,14 +213,6 @@ async getPendingEnrollments() {
 
             // Update laborer with face data
             const { error: laborError } = await supabaseClient
-                .from('laborers')
-                .update({
-                    face_descriptor: enrollment.face_descriptor,
-                    face_photo_url: enrollment.photo_url,
-                    face_enrolled: true,
-                    face_enrolled_at: new Date().toISOString(),
-                    needs_reenrollment: false
-                })
                 .eq('client_id', clientId)
                 .eq('labor_id', enrollment.labor_id);
 
