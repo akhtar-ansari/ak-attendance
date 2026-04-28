@@ -674,14 +674,17 @@
 
         // Show enroll options
         function showEnrollOptions(laborId) {
-            const labor = laborers.find(l => l.labor_id === laborId);
-            if (!labor) return;
-
-            selectedEnrollLabor = labor;
-            document.getElementById('enrollLaborName').textContent = labor.name;
-            document.getElementById('enrollLaborId').textContent = labor.labor_id;
-            document.getElementById('enrollOptionsModal').classList.add('active');
-        }
+    console.log('laborId:', laborId);
+    console.log('laborers array:', laborers);
+    const labor = laborers.find(l => l.labor_id === laborId);
+    console.log('found labor:', labor);
+    if (!labor) return;
+    selectedEnrollLabor = labor;
+    console.log('selectedEnrollLabor set:', selectedEnrollLabor);
+    document.getElementById('enrollLaborName').textContent = labor.name;
+    document.getElementById('enrollLaborId').textContent = labor.labor_id;
+    document.getElementById('enrollOptionsModal').classList.add('active');
+}
 
         function closeEnrollOptions() {
             document.getElementById('enrollOptionsModal').classList.remove('active');
