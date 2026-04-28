@@ -26,30 +26,85 @@
             border-radius: 8px;
             font-size: 14px;
         }
-        .role-badge {
-            display: inline-block;
+        /* Enrollment Link Styles */
+        .pending-badge {
+            background: #e53e3e;
+            color: white;
+            border-radius: 50%;
             padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 5px;
         }
-        .role-badge.labor { background: #e2e8f0; color: #4a5568; }
-        .role-badge.team_leader { background: #fef3c7; color: #92400e; }
-        .salary-cell { font-weight: 600; color: #2d3748; }
-        .absent-streak-badge {
-            display: inline-block;
-            background: #fed7d7;
-            color: #c53030;
-            font-size: 10px;
-            font-weight: 600;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 6px;
-            animation: pulse-red 2s infinite;
+        .enroll-options {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            padding: 20px;
         }
-        @keyframes pulse-red {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+        .enroll-option-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 25px 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+        .enroll-option-btn:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        .enroll-option-btn .icon {
+            font-size: 36px;
+        }
+        .enroll-option-btn .label {
+            font-weight: 600;
+            color: #333;
+        }
+        .link-display {
+            background: #f7fafc;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+            margin: 15px 0;
+        }
+        .pending-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .pending-photo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #667eea;
+        }
+        .pending-info {
+            flex: 1;
+        }
+        .pending-info .name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .pending-info .details {
+            color: #666;
+            font-size: 13px;
+        }
+        .pending-actions {
+            display: flex;
+            gap: 8px;
         }
     </style>
 </head>
@@ -67,6 +122,9 @@
                 <button type="button" class="btn btn-primary" onclick="showAddModal()" id="addBtn">➕ Add Labor</button>
                 <button type="button" class="btn btn-success" onclick="location.href='import.html'" id="importBtn">📤 Import CSV</button>
                 <button type="button" class="btn btn-secondary" onclick="exportToCSV()">📥 Export CSV</button>
+                <button type="button" class="btn btn-warning" onclick="showPendingModal()" id="pendingBtn" style="display: none;">
+                    🔔 Pending <span class="pending-badge" id="pendingCount">0</span>
+                </button>
             </div>
             <div class="filter-bar">
                 <select id="departmentFilter" onchange="applyFilters()">
@@ -74,7 +132,7 @@
                 </select>
                 <select id="statusFilter" onchange="applyFilters()">
                     <option value="">All Status</option>
-                    <option value="active" selected>Active</option>
+                    <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                 </select>
                 <select id="faceFilter" onchange="applyFilters()">
@@ -98,11 +156,9 @@
                             <th>Labor ID</th>
                             <th>Name</th>
                             <th>Iqama</th>
-                            <th>DOJ</th>
+                            <th>Date of Joining</th>
                             <th>Nationality</th>
                             <th>Department</th>
-                            <th>Role</th>
-                            <th>Salary</th>
                             <th>Status</th>
                             <th>Face</th>
                             <th>Last Sync</th>
@@ -111,7 +167,7 @@
                     </thead>
                     <tbody id="laborTable">
                         <tr>
-                            <td colspan="12" class="text-center p-20">Loading...</td>
+                            <td colspan="10" class="text-center p-20">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -158,16 +214,6 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Role *</label>
-                        <input type="text" id="laborRole" class="form-control" placeholder="e.g., Labor, Team Leader, Supervisor" value="Labor" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Monthly Salary (SAR) *</label>
-                        <input type="number" id="laborSalary" class="form-control" value="3000" min="0" step="100" required>
-                    </div>
-                    
-                    <div class="form-group">
                         <label>Status</label>
                         <select id="laborStatus" class="form-control">
                             <option value="active">Active</option>
@@ -183,26 +229,68 @@
         </div>
     </div>
 
-    <!-- Mark Inactive Modal -->
-    <div class="modal-overlay" id="inactiveModal">
+    <!-- Enroll Options Modal -->
+    <div class="modal-overlay" id="enrollOptionsModal">
         <div class="modal" style="max-width: 400px;">
             <div class="modal-header">
-                <h2>⚠️ Mark Labor Inactive</h2>
-                <button type="button" class="modal-close" onclick="closeInactiveModal()">&times;</button>
+                <h2>Enroll Face</h2>
+                <button type="button" class="modal-close" onclick="closeEnrollOptions()">&times;</button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="inactiveLaborId">
-                <p id="inactiveLaborName" style="font-weight: 600; margin-bottom: 15px;"></p>
-                
-                <div class="form-group">
-                    <label>Last Working Date *</label>
-                    <input type="date" id="lastWorkingDate" class="form-control" required>
-                    <small style="color: #666;">Labor will be marked Absent from the next day onwards in current month's report.</small>
+                <p style="text-align: center; margin-bottom: 15px;">
+                    <strong id="enrollLaborName">-</strong> (<span id="enrollLaborId">-</span>)
+                </p>
+                <div class="enroll-options">
+                    <div class="enroll-option-btn" onclick="enrollNow()">
+                        <span class="icon">📸</span>
+                        <span class="label">Enroll Now</span>
+                    </div>
+                    <div class="enroll-option-btn" onclick="createEnrollLink()">
+                        <span class="icon">🔗</span>
+                        <span class="label">Create Link</span>
+                    </div>
                 </div>
+                <p style="text-align: center; color: #666; font-size: 13px;">
+                    "Create Link" generates a one-time URL for the labor to self-enroll on their phone
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link Created Modal -->
+    <div class="modal-overlay" id="linkCreatedModal">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>✅ Link Created</h2>
+                <button type="button" class="modal-close" onclick="closeLinkModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="text-align: center; margin-bottom: 10px;">
+                    Share this link with <strong id="linkLaborName">-</strong>
+                </p>
+                <div class="link-display" id="enrollLinkUrl">-</div>
+                <p style="text-align: center; color: #e53e3e; font-size: 13px;">
+                    ⏰ Link expires in 1 hour
+                </p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeInactiveModal()">Cancel</button>
-                <button type="button" class="btn btn-danger" onclick="confirmMarkInactive()">🚫 Mark Inactive</button>
+                <button type="button" class="btn btn-primary" onclick="copyLink()">📋 Copy Link</button>
+                <button type="button" class="btn btn-success" onclick="shareLink()">📤 Share</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Enrollments Modal -->
+    <div class="modal-overlay" id="pendingModal">
+        <div class="modal" style="max-width: 550px;">
+            <div class="modal-header">
+                <h2>🔔 Pending Enrollments</h2>
+                <button type="button" class="modal-close" onclick="closePendingModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+                <div id="pendingList">
+                    <p class="text-center text-muted">Loading...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -219,7 +307,7 @@
     <script src="../js/ui/toast.js"></script>
     <script src="../js/api/department-api.js"></script>
     <script src="../js/api/labor-api.js"></script>
-    <script src="../js/api/report-api.js"></script>
+    <script src="../js/api/enrollment-api.js"></script>
 
     <script>
         // Require login
@@ -231,7 +319,6 @@
         let laborers = [];
         let departments = [];
         let filteredLaborers = [];
-        let absentStreaks = {}; // Store absent streaks by labor_id
 
         // Check permissions for add/import
         function checkPermissions() {
@@ -262,23 +349,16 @@
                         return numA - numB;
                     });
                     filteredLaborers = [...laborers];
+                    renderTable();
                 } else {
                     throw new Error(laborResult.error);
                 }
-
-                // Load absent streaks (3+ consecutive absent days)
-                const streakResult = await ReportAPI.getAllAbsentStreaks();
-                if (streakResult.success) {
-                    absentStreaks = streakResult.data;
-                }
-
-                applyFilters(); // Apply default filter (Active)
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
                 Toast.error('Failed to load data: ' + error.message);
                 document.getElementById('laborTable').innerHTML = `
-                    <tr><td colspan="12" class="text-center p-20 text-danger">
+                    <tr><td colspan="10" class="text-center p-20 text-danger">
                         ❌ Failed to load. Check internet connection.
                     </td></tr>
                 `;
@@ -301,7 +381,7 @@
             // Form dropdown
             formSelect.innerHTML = '<option value="">-- Select Department --</option>';
             departments.forEach(dept => {
-                // For non-admin, only show their department
+                // For non-super-admin, only show their department
                 if (session.role === 'admin' || dept.id === session.departmentId) {
                     formSelect.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
                 }
@@ -345,30 +425,13 @@
             renderTable();
         }
 
-        // Format role for display
-        function formatRole(role) {
-            if (!role || role === 'labor' || role === 'Labor') {
-                return '<span class="role-badge labor">Labor</span>';
-            }
-            return `<span class="role-badge team_leader">${role}</span>`;
-        }
-
-        // Get absent streak badge HTML
-        function getAbsentStreakBadge(laborId) {
-            const streak = absentStreaks[laborId];
-            if (streak && streak >= 3) {
-                return `<span class="absent-streak-badge" title="${streak} consecutive absent days">⚠️ ${streak} days absent</span>`;
-            }
-            return '';
-        }
-
         // Render table
         function renderTable() {
             const tbody = document.getElementById('laborTable');
 
             if (filteredLaborers.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="12" class="text-center p-20 text-muted">
+                    <tr><td colspan="10" class="text-center p-20 text-muted">
                         No laborers found. ${session.role !== 'supervisor' ? 'Click "Add Labor" to create one.' : ''}
                     </td></tr>
                 `;
@@ -389,22 +452,17 @@
                 // Action buttons
                 let actions = '';
                 
-                // Enroll/Re-enroll button
+                // Enroll/Re-enroll button - now shows options modal
                 if (!labor.face_enrolled || labor.needs_reenrollment) {
-                    actions += `<button class="btn btn-sm btn-success" onclick="enrollFace('${labor.labor_id}')" title="Enroll Face">📸</button> `;
+                    actions += `<button class="btn btn-sm btn-success" onclick="showEnrollOptions('${labor.labor_id}')">📸 Enroll</button> `;
                 } else {
-                    actions += `<button class="btn btn-sm btn-warning" onclick="enrollFace('${labor.labor_id}')" title="Re-enroll Face">🔄</button> `;
+                    actions += `<button class="btn btn-sm btn-warning" onclick="showEnrollOptions('${labor.labor_id}')">🔄 Re-enroll</button> `;
                 }
 
-                // Edit/Delete/Reactivate for admin
+                // Edit/Delete for admin/super_admin
                 if (session.role !== 'supervisor') {
-                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')" title="Edit">✏️</button> `;
-                    
-                    if (labor.status === 'active') {
-                        actions += `<button class="btn btn-sm btn-danger" onclick="showInactiveModal('${labor.labor_id}')" title="Mark Inactive">🚫</button>`;
-                    } else {
-                        actions += `<button class="btn btn-sm btn-success" onclick="reactivateLabor('${labor.labor_id}')" title="Reactivate">✅</button>`;
-                    }
+                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️</button> `;
+                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️</button>`;
                 }
 
                 // Sync status
@@ -426,26 +484,19 @@
                     </span>`;
                 }
 
-                // Last working date info
-                let statusHtml = `<span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">${labor.status}</span>`;
-                if (labor.last_working_date && labor.status === 'inactive') {
-                    statusHtml += `<br><small style="color:#718096;">LWD: ${DateUtils.formatDate(labor.last_working_date)}</small>`;
-                }
-
-                // Absent streak badge (only for active laborers)
-                const absentBadge = labor.status === 'active' ? getAbsentStreakBadge(labor.labor_id) : '';
-
                 return `
                     <tr>
                         <td><strong>${labor.labor_id}</strong></td>
-                        <td>${labor.name}${absentBadge}</td>
+                        <td>${labor.name}</td>
                         <td>${labor.iqama_number}</td>
                         <td>${DateUtils.formatDate(labor.date_of_joining)}</td>
                         <td>${labor.nationality}</td>
                         <td>${labor.departments?.name || '-'}</td>
-                        <td>${formatRole(labor.role)}</td>
-                        <td class="salary-cell">${(labor.monthly_salary || 3000).toLocaleString()}</td>
-                        <td>${statusHtml}</td>
+                        <td>
+                            <span class="badge badge-${labor.status === 'active' ? 'active' : 'inactive'}">
+                                ${labor.status}
+                            </span>
+                        </td>
                         <td>${faceHtml}</td>
                         <td>${syncHtml}</td>
                         <td>${actions}</td>
@@ -463,11 +514,9 @@
             document.getElementById('laborIqama').disabled = false;
             document.getElementById('laborDOJ').value = '';
             document.getElementById('laborNationality').value = '';
-            document.getElementById('laborRole').value = 'Labor';
-            document.getElementById('laborSalary').value = 3000;
             document.getElementById('laborStatus').value = 'active';
             
-            // Pre-select department for non-admin
+            // Pre-select department for non-super-admin
             if (session.role !== 'admin' && session.departmentId) {
                 document.getElementById('laborDepartment').value = session.departmentId;
             } else {
@@ -490,8 +539,6 @@
             document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
             document.getElementById('laborNationality').value = labor.nationality;
             document.getElementById('laborDepartment').value = labor.department_id;
-            document.getElementById('laborRole').value = labor.role || 'Labor';
-            document.getElementById('laborSalary').value = labor.monthly_salary || 3000;
             document.getElementById('laborStatus').value = labor.status;
 
             document.getElementById('laborModal').classList.add('active');
@@ -510,8 +557,6 @@
             const dateOfJoining = document.getElementById('laborDOJ').value;
             const nationality = document.getElementById('laborNationality').value.trim();
             const departmentId = document.getElementById('laborDepartment').value;
-            const role = document.getElementById('laborRole').value.trim() || 'Labor';
-            const monthlySalary = parseFloat(document.getElementById('laborSalary').value) || 3000;
             const status = document.getElementById('laborStatus').value;
 
             // Validation
@@ -530,8 +575,6 @@
                         dateOfJoining,
                         nationality,
                         departmentId,
-                        role,
-                        monthlySalary,
                         status
                     });
                 } else {
@@ -541,8 +584,6 @@
                         dateOfJoining,
                         nationality,
                         departmentId,
-                        role,
-                        monthlySalary,
                         status
                     });
                 }
@@ -562,115 +603,31 @@
             }
         }
 
-        // Show inactive modal
-        function showInactiveModal(laborId) {
-            const labor = laborers.find(l => l.labor_id === laborId);
-            if (!labor) return;
-
-            document.getElementById('inactiveLaborId').value = laborId;
-            document.getElementById('inactiveLaborName').textContent = `${labor.name} (${laborId})`;
-            document.getElementById('lastWorkingDate').value = DateUtils.today();
-            document.getElementById('lastWorkingDate').max = DateUtils.today();
-
-            document.getElementById('inactiveModal').classList.add('active');
-        }
-
-        // Close inactive modal
-        function closeInactiveModal() {
-            document.getElementById('inactiveModal').classList.remove('active');
-        }
-
-        // Confirm mark inactive
-        async function confirmMarkInactive() {
-            const laborId = document.getElementById('inactiveLaborId').value;
-            const lastWorkingDate = document.getElementById('lastWorkingDate').value;
-
-            if (!lastWorkingDate) {
-                Toast.error('Please select last working date');
-                return;
-            }
-
-            try {
-                SyncIndicator.show('Validating...');
-
-                // Check if labor has punches after the selected date
-                const { data: punches, error: punchError } = await supabaseClient
-                    .from('punch_records')
-                    .select('date')
-                    .eq('labor_id', laborId)
-                    .eq('client_id', AUTH.getClientId())
-                    .gt('date', lastWorkingDate)
-                    .order('date', { ascending: false })
-                    .limit(1);
-
-                if (punchError) throw punchError;
-
-                if (punches && punches.length > 0) {
-                    SyncIndicator.hide();
-                    Toast.error(`Labor can't be marked inactive. Last punch was on ${DateUtils.formatDate(punches[0].date)}`);
-                    return;
-                }
-
-                // Mark as inactive
-                SyncIndicator.show('Marking inactive...');
-
-                const { error: updateError } = await supabaseClient
-                    .from('laborers')
-                    .update({ 
-                        status: 'inactive',
-                        last_working_date: lastWorkingDate
-                    })
-                    .eq('labor_id', laborId)
-                    .eq('client_id', AUTH.getClientId());
-
-                if (updateError) throw updateError;
-
-                SyncIndicator.hide();
-                Toast.success('Labor marked as inactive!');
-                closeInactiveModal();
-                loadData();
-
-            } catch (error) {
-                SyncIndicator.hide();
-                Toast.error('Failed: ' + error.message);
-            }
-        }
-
-        // Reactivate labor
-        async function reactivateLabor(laborId) {
+        // Delete labor
+        async function deleteLabor(laborId) {
             const labor = laborers.find(l => l.labor_id === laborId);
             
-            if (!confirm(`Reactivate "${labor.name}" (${laborId})?\n\nThis will set status to Active and clear the last working date.`)) {
+            if (!confirm(`Delete labor "${labor.name}" (${laborId})?\n\nThis will set the labor as inactive.`)) {
                 return;
             }
 
             try {
-                SyncIndicator.show('Reactivating...');
+                SyncIndicator.show('Deleting...');
 
-                const { error } = await supabaseClient
-                    .from('laborers')
-                    .update({ 
-                        status: 'active',
-                        last_working_date: null
-                    })
-                    .eq('labor_id', laborId)
-                    .eq('client_id', AUTH.getClientId());
+                const result = await LaborAPI.delete(laborId, false); // Soft delete
 
-                if (error) throw error;
+                if (result.success) {
+                    Toast.success('Labor deleted!');
+                    loadData();
+                } else {
+                    throw new Error(result.error);
+                }
 
                 SyncIndicator.hide();
-                Toast.success('Labor reactivated!');
-                loadData();
-
             } catch (error) {
                 SyncIndicator.hide();
-                Toast.error('Failed to reactivate: ' + error.message);
+                Toast.error('Failed to delete: ' + error.message);
             }
-        }
-
-        // Enroll face
-        function enrollFace(laborId) {
-            window.location.href = `enroll.html?id=${laborId}`;
         }
 
         // Export to CSV
@@ -687,21 +644,204 @@
                 'Date of Joining': DateUtils.formatDate(l.date_of_joining),
                 'Nationality': l.nationality,
                 'Department': l.departments?.name || '',
-                'Role': l.role || 'Labor',
-                'Monthly Salary': l.monthly_salary || 3000,
                 'Status': l.status,
-                'Last Working Date': l.last_working_date ? DateUtils.formatDate(l.last_working_date) : '',
-                'Face Enrolled': l.face_enrolled ? 'Yes' : 'No',
-                'Absent Streak': absentStreaks[l.labor_id] || 0
+                'Face Enrolled': l.face_enrolled ? 'Yes' : 'No'
             }));
 
             CSVHandler.exportToCSV(data, 'labor_master');
             Toast.success('CSV exported!');
         }
 
+        // ============ ENROLLMENT LINK FUNCTIONS ============
+
+        let selectedEnrollLabor = null;
+        let currentEnrollLink = null;
+
+        // Load pending count on page load
+        async function loadPendingCount() {
+            try {
+                const result = await EnrollmentAPI.getPendingCount();
+                if (result.success && result.count > 0) {
+                    document.getElementById('pendingBtn').style.display = 'inline-block';
+                    document.getElementById('pendingCount').textContent = result.count;
+                } else {
+                    document.getElementById('pendingBtn').style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Failed to load pending count:', e);
+            }
+        }
+
+        // Show enroll options
+        function showEnrollOptions(laborId) {
+            const labor = laborers.find(l => l.labor_id === laborId);
+            if (!labor) return;
+
+            selectedEnrollLabor = labor;
+            document.getElementById('enrollLaborName').textContent = labor.name;
+            document.getElementById('enrollLaborId').textContent = labor.labor_id;
+            document.getElementById('enrollOptionsModal').classList.add('active');
+        }
+
+        function closeEnrollOptions() {
+            document.getElementById('enrollOptionsModal').classList.remove('active');
+            selectedEnrollLabor = null;
+        }
+
+        // Enroll now (existing flow)
+        function enrollNow() {
+            if (!selectedEnrollLabor) return;
+            closeEnrollOptions();
+            window.location.href = `enroll.html?id=${selectedEnrollLabor.labor_id}`;
+        }
+
+        // Create enrollment link
+        async function createEnrollLink() {
+            if (!selectedEnrollLabor) return;
+
+            try {
+                SyncIndicator.show('Creating link...');
+                const result = await EnrollmentAPI.createLink(selectedEnrollLabor.labor_id);
+                SyncIndicator.hide();
+
+                if (result.success) {
+                    currentEnrollLink = result.data.url;
+                    document.getElementById('linkLaborName').textContent = result.data.laborName;
+                    document.getElementById('enrollLinkUrl').textContent = result.data.url;
+                    
+                    closeEnrollOptions();
+                    document.getElementById('linkCreatedModal').classList.add('active');
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (e) {
+                SyncIndicator.hide();
+                Toast.error('Failed to create link: ' + e.message);
+            }
+        }
+
+        function closeLinkModal() {
+            document.getElementById('linkCreatedModal').classList.remove('active');
+            currentEnrollLink = null;
+        }
+
+        // Copy link to clipboard
+        function copyLink() {
+            if (!currentEnrollLink) return;
+            navigator.clipboard.writeText(currentEnrollLink).then(() => {
+                Toast.success('Link copied!');
+            }).catch(() => {
+                Toast.error('Failed to copy');
+            });
+        }
+
+        // Share link (mobile share API)
+        function shareLink() {
+            if (!currentEnrollLink) return;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Face Enrollment Link',
+                    text: 'Use this link to enroll your face for attendance',
+                    url: currentEnrollLink
+                }).catch(() => {});
+            } else {
+                copyLink();
+            }
+        }
+
+        // Show pending enrollments modal
+        async function showPendingModal() {
+            document.getElementById('pendingModal').classList.add('active');
+            document.getElementById('pendingList').innerHTML = '<p class="text-center">Loading...</p>';
+
+            try {
+                const result = await EnrollmentAPI.getPendingEnrollments();
+                
+                if (!result.success) throw new Error(result.error);
+
+                if (result.data.length === 0) {
+                    document.getElementById('pendingList').innerHTML = '<p class="text-center text-muted">No pending enrollments</p>';
+                    return;
+                }
+
+                let html = '';
+                result.data.forEach(item => {
+                    const submittedAt = new Date(item.submitted_at).toLocaleString();
+                    html += `
+                        <div class="pending-item" id="pending-${item.id}">
+                            <img src="${item.photo_url}" class="pending-photo" alt="Photo">
+                            <div class="pending-info">
+                                <div class="name">${item.laborers?.name || 'Unknown'}</div>
+                                <div class="details">${item.labor_id}</div>
+                                <div class="details">Submitted: ${submittedAt}</div>
+                            </div>
+                            <div class="pending-actions">
+                                <button class="btn btn-sm btn-success" onclick="approveEnrollment('${item.id}')">✓</button>
+                                <button class="btn btn-sm btn-danger" onclick="rejectEnrollment('${item.id}')">✗</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('pendingList').innerHTML = html;
+            } catch (e) {
+                document.getElementById('pendingList').innerHTML = `<p class="text-center text-danger">Failed to load: ${e.message}</p>`;
+            }
+        }
+
+        function closePendingModal() {
+            document.getElementById('pendingModal').classList.remove('active');
+        }
+
+        // Approve enrollment
+        async function approveEnrollment(enrollmentId) {
+            if (!confirm('Approve this enrollment?')) return;
+
+            try {
+                SyncIndicator.show('Approving...');
+                const result = await EnrollmentAPI.approveEnrollment(enrollmentId);
+                SyncIndicator.hide();
+
+                if (result.success) {
+                    Toast.success('Enrollment approved!');
+                    document.getElementById(`pending-${enrollmentId}`).remove();
+                    loadPendingCount();
+                    loadData(); // Refresh labor list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (e) {
+                SyncIndicator.hide();
+                Toast.error('Failed: ' + e.message);
+            }
+        }
+
+        // Reject enrollment
+        async function rejectEnrollment(enrollmentId) {
+            if (!confirm('Reject this enrollment?')) return;
+
+            try {
+                SyncIndicator.show('Rejecting...');
+                const result = await EnrollmentAPI.rejectEnrollment(enrollmentId);
+                SyncIndicator.hide();
+
+                if (result.success) {
+                    Toast.success('Enrollment rejected');
+                    document.getElementById(`pending-${enrollmentId}`).remove();
+                    loadPendingCount();
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (e) {
+                SyncIndicator.hide();
+                Toast.error('Failed: ' + e.message);
+            }
+        }
+
         // Initialize
         checkPermissions();
         loadData();
+        loadPendingCount();
     </script>
 </body>
 </html>
