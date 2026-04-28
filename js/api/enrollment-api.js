@@ -242,11 +242,12 @@ const EnrollmentAPI = {
                 }
             }
 
-            // 4. Delete the enrollment record entirely
+            // 4. Delete the enrollment record entirely (by id only)
             const { error: deleteError } = await supabaseClient
                 .from('enrollment_links')
                 .delete()
-                .eq('id', enrollmentId);
+                .eq('id', enrollmentId)
+                .eq('client_id', clientId);
 
             if (deleteError) throw deleteError;
 
