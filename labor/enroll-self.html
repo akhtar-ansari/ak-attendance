@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Face Enrollment</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 400px;
+            width: 100%;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 22px;
+            margin-bottom: 5px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 25px;
+        }
+        .status-card {
+            text-align: center;
+            padding: 30px 20px;
+        }
+        .status-icon {
+            font-size: 60px;
+            margin-bottom: 15px;
+        }
+        .status-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .status-message {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .labor-info {
+            background: #f0f4ff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .labor-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .labor-id {
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .expires-info {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        #canvas {
+            display: none;
+        }
+        .face-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 250px;
+            border: 3px dashed rgba(255,255,255,0.5);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .face-overlay.detecting {
+            border-color: #ffc107;
+            animation: pulse 1s infinite;
+        }
+        .face-overlay.detected {
+            border-color: #28a745;
+            border-style: solid;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .instructions {
+            background: #e8f4fd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .instructions h3 {
+            font-size: 14px;
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+        .instructions ul {
+            list-style: none;
+            font-size: 13px;
+            color: #555;
+        }
+        .instructions li {
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        .instructions li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #28a745;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .detection-status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .detection-status.detecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .detection-status.detected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .detection-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .preview-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .preview-image {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #28a745;
+            margin-bottom: 15px;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📸 Face Enrollment</h1>
+            <p>AK Attendance System</p>
+        </div>
+
+        <div class="content">
+            <!-- Loading State -->
+            <div id="loadingState" class="status-card">
+                <div class="status-icon">⏳</div>
+                <div class="status-title">Loading...</div>
+                <div class="status-message">Please wait while we verify your link</div>
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" class="status-card hidden">
+                <div class="status-icon">❌</div>
+                <div class="status-title">Link Invalid</div>
+                <div class="status-message" id="errorMessage">This link has expired or is invalid.</div>
+            </div>
+
+            <!-- Enrollment Form -->
+            <div id="enrollmentForm" class="hidden">
+                <div class="labor-info">
+                    <div class="labor-name" id="laborName">-</div>
+                    <div class="labor-id" id="laborIdDisplay">-</div>
+                </div>
+
+                <div class="expires-info" id="expiresInfo">
+                    ⏰ Link expires in <span id="expiresTime">60</span> minutes
+                </div>
+
+                <div class="instructions">
+                    <h3>📋 Instructions</h3>
+                    <ul>
+                        <li>Position your face inside the oval</li>
+                        <li>Ensure good lighting on your face</li>
+                        <li>Remove sunglasses or hat</li>
+                        <li>Look straight at the camera</li>
+                    </ul>
+                </div>
+
+                <div class="video-container">
+                    <video id="video" autoplay playsinline></video>
+                    <div class="face-overlay" id="faceOverlay"></div>
+                </div>
+                <canvas id="canvas"></canvas>
+
+                <div class="detection-status detecting" id="detectionStatus">
+                    Looking for face...
+                </div>
+
+                <button class="btn btn-primary" id="captureBtn" disabled onclick="capturePhoto()">
+                    📸 Capture Photo
+                </button>
+            </div>
+
+            <!-- Preview & Confirm -->
+            <div id="previewState" class="hidden">
+                <div class="labor-info">
+                    <div class="labor-name" id="laborName2">-</div>
+                    <div class="labor-id" id="laborIdDisplay2">-</div>
+                </div>
+
+                <div class="preview-container">
+                    <img id="previewImage" class="preview-image" src="" alt="Preview">
+                    <p style="color: #28a745; font-weight: 600;">✓ Face detected successfully!</p>
+                </div>
+
+                <button class="btn btn-success" id="submitBtn" onclick="submitEnrollment()">
+                    ✅ Submit for Approval
+                </button>
+
+                <button class="btn" style="background: #f0f0f0; color: #333; margin-top: 10px;" onclick="retakePhoto()">
+                    🔄 Retake Photo
+                </button>
+            </div>
+
+            <!-- Success State -->
+            <div id="successState" class="status-card hidden">
+                <div class="status-icon">✅</div>
+                <div class="status-title">Submitted Successfully!</div>
+                <div class="status-message">
+                    Your photo has been submitted for approval.<br><br>
+                    Your supervisor will review and approve your enrollment shortly.
+                </div>
+            </div>
+
+            <!-- Submitting State -->
+            <div id="submittingState" class="status-card hidden">
+                <div class="status-icon">📤</div>
+                <div class="status-title">Submitting...</div>
+                <div class="status-message">Please wait while we upload your photo</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Face API -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+    <!-- Supabase Config (inline for public page) -->
+    <script>
+        const SUPABASE_URL = 'https://kyktwzwiraipwyglkhva.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5a3R3endpcmFpcHd5Z2xraHZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI1NjMyNTMsImV4cCI6MjA1ODEzOTI1M30.aGVkeWxDb284b1Y5RnlMbjNrT0dzVjFZekZvMDdZeHM';
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    </script>
+
+    <script>
+        // Global state
+        let tokenData = null;
+        let video = null;
+        let canvas = null;
+        let capturedImage = null;
+        let capturedDescriptor = null;
+        let faceDetectionInterval = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Get token from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            if (!token) {
+                showError('No enrollment link provided');
+                return;
+            }
+
+            // Validate token
+            try {
+                const { data, error } = await supabaseClient
+                    .from('enrollment_links')
+                    .select(`
+                        *,
+                        laborers:labor_id (
+                            labor_id,
+                            name
+                        )
+                    `)
+                    .eq('token', token)
+                    .single();
+
+                if (error || !data) {
+                    showError('Invalid link. Please request a new enrollment link.');
+                    return;
+                }
+
+                // Check if expired
+                if (new Date(data.expires_at) < new Date()) {
+                    showError('This link has expired. Please request a new enrollment link.');
+                    return;
+                }
+
+                // Check if already used
+                if (data.status !== 'pending') {
+                    if (data.status === 'submitted') {
+                        showError('This link has already been used. Your enrollment is pending approval.');
+                    } else if (data.status === 'approved') {
+                        showError('Your enrollment has already been approved.');
+                    } else {
+                        showError('This link is no longer valid.');
+                    }
+                    return;
+                }
+
+                // Valid token - store data and show form
+                tokenData = {
+                    token: token,
+                    id: data.id,
+                    laborId: data.labor_id,
+                    laborName: data.laborers?.name || 'Unknown',
+                    clientId: data.client_id,
+                    expiresAt: data.expires_at
+                };
+
+                // Show enrollment form
+                showEnrollmentForm();
+
+            } catch (err) {
+                console.error('Validation error:', err);
+                showError('Failed to validate link. Please try again.');
+            }
+        });
+
+        // Show error state
+        function showError(message) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorState').classList.remove('hidden');
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        // Show enrollment form
+        async function showEnrollmentForm() {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('enrollmentForm').classList.remove('hidden');
+
+            // Set labor info
+            document.getElementById('laborName').textContent = tokenData.laborName;
+            document.getElementById('laborIdDisplay').textContent = tokenData.laborId;
+
+            // Calculate expires time
+            const expiresAt = new Date(tokenData.expiresAt);
+            const now = new Date();
+            const minutesLeft = Math.max(0, Math.round((expiresAt - now) / 60000));
+            document.getElementById('expiresTime').textContent = minutesLeft;
+
+            // Load face-api models
+            await loadFaceModels();
+
+            // Start camera
+            await startCamera();
+        }
+
+        // Load face-api.js models
+        async function loadFaceModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+            
+            try {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                console.log('Face models loaded');
+            } catch (err) {
+                console.error('Failed to load face models:', err);
+                showError('Failed to load face detection. Please refresh the page.');
+            }
+        }
+
+        // Start camera
+        async function startCamera() {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 640 }
+                    }
+                });
+
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    startFaceDetection();
+                };
+
+            } catch (err) {
+                console.error('Camera error:', err);
+                document.getElementById('detectionStatus').textContent = '❌ Camera access denied';
+                document.getElementById('detectionStatus').className = 'detection-status error';
+            }
+        }
+
+        // Start face detection loop
+        function startFaceDetection() {
+            const overlay = document.getElementById('faceOverlay');
+            const status = document.getElementById('detectionStatus');
+            const captureBtn = document.getElementById('captureBtn');
+
+            faceDetectionInterval = setInterval(async () => {
+                if (!video || video.paused || video.ended) return;
+
+                try {
+                    const detection = await faceapi
+                        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+
+                    if (detection) {
+                        overlay.className = 'face-overlay detected';
+                        status.textContent = '✓ Face detected - Ready to capture!';
+                        status.className = 'detection-status detected';
+                        captureBtn.disabled = false;
+                    } else {
+                        overlay.className = 'face-overlay detecting';
+                        status.textContent = 'Looking for face...';
+                        status.className = 'detection-status detecting';
+                        captureBtn.disabled = true;
+                    }
+                } catch (err) {
+                    console.error('Detection error:', err);
+                }
+            }, 500);
+        }
+
+        // Capture photo
+        async function capturePhoto() {
+            const captureBtn = document.getElementById('captureBtn');
+            captureBtn.disabled = true;
+            captureBtn.innerHTML = '<span class="loading-spinner"></span> Processing...';
+
+            try {
+                // Get face detection with descriptor
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                if (!detection) {
+                    alert('No face detected. Please try again.');
+                    captureBtn.disabled = false;
+                    captureBtn.textContent = '📸 Capture Photo';
+                    return;
+                }
+
+                // Draw to canvas
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                // Get image data
+                capturedImage = canvas.toDataURL('image/jpeg', 0.8);
+                capturedDescriptor = Array.from(detection.descriptor);
+
+                // Stop detection
+                if (faceDetectionInterval) {
+                    clearInterval(faceDetectionInterval);
+                }
+
+                // Stop camera
+                const stream = video.srcObject;
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+
+                // Show preview
+                showPreview();
+
+            } catch (err) {
+                console.error('Capture error:', err);
+                alert('Failed to capture photo. Please try again.');
+                captureBtn.disabled = false;
+                captureBtn.textContent = '📸 Capture Photo';
+            }
+        }
+
+        // Show preview
+        function showPreview() {
+            document.getElementById('enrollmentForm').classList.add('hidden');
+            document.getElementById('previewState').classList.remove('hidden');
+            
+            document.getElementById('laborName2').textContent = tokenData.laborName;
+            document.getElementById('laborIdDisplay2').textContent = tokenData.laborId;
+            document.getElementById('previewImage').src = capturedImage;
+        }
+
+        // Retake photo
+        async function retakePhoto() {
+            document.getElementById('previewState').classList.add('hidden');
+            document.getElementById('enrollmentForm').classList.remove('hidden');
+            
+            capturedImage = null;
+            capturedDescriptor = null;
+
+            // Restart camera
+            await startCamera();
+            
+            // Reset button
+            document.getElementById('captureBtn').disabled = true;
+            document.getElementById('captureBtn').textContent = '📸 Capture Photo';
+        }
+
+        // Submit enrollment
+        async function submitEnrollment() {
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> Submitting...';
+
+            document.getElementById('previewState').classList.add('hidden');
+            document.getElementById('submittingState').classList.remove('hidden');
+
+            try {
+                // Convert base64 to blob
+                const response = await fetch(capturedImage);
+                const blob = await response.blob();
+
+                // Upload photo
+                const fileName = `enrollment/${tokenData.laborId}_${Date.now()}.jpg`;
+                const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                    .from('punch-photos')
+                    .upload(fileName, blob, {
+                        contentType: 'image/jpeg',
+                        upsert: true
+                    });
+
+                if (uploadError) throw uploadError;
+
+                // Get public URL
+                const { data: urlData } = supabaseClient.storage
+                    .from('punch-photos')
+                    .getPublicUrl(fileName);
+
+                const photoUrl = urlData.publicUrl;
+
+                // Update enrollment record
+                const { error: updateError } = await supabaseClient
+                    .from('enrollment_links')
+                    .update({
+                        photo_url: photoUrl,
+                        face_descriptor: JSON.stringify(capturedDescriptor),
+                        status: 'submitted',
+                        submitted_at: new Date().toISOString()
+                    })
+                    .eq('token', tokenData.token)
+                    .eq('status', 'pending');
+
+                if (updateError) throw updateError;
+
+                // Show success
+                document.getElementById('submittingState').classList.add('hidden');
+                document.getElementById('successState').classList.remove('hidden');
+
+            } catch (err) {
+                console.error('Submit error:', err);
+                alert('Failed to submit. Please try again.');
+                document.getElementById('submittingState').classList.add('hidden');
+                document.getElementById('previewState').classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Submit for Approval';
+            }
+        }
+    </script>
+</body>
+</html>
