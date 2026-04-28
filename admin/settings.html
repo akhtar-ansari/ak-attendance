@@ -283,6 +283,32 @@
                 </table>
             </div>
 
+            <!-- OT Rates -->
+            <div class="settings-section">
+                <h3>💰 Overtime Rates</h3>
+                <table class="holiday-table">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Rate (SAR / hour)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="otRatesList">
+                        <tr class="empty-row">
+                            <td colspan="3">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div style="margin-top: 15px;">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="newOTRole" class="form-control" placeholder="Role name e.g. Supervisor" style="max-width: 220px;">
+                        <input type="number" id="newOTRate" class="setting-input" placeholder="0.00" min="0" step="0.5">
+                        <button type="button" class="btn btn-primary" onclick="addOTRate()">+ Add</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Bar -->
             <div class="save-bar">
                 <button type="button" class="btn btn-secondary" onclick="loadSettings()">🔄 Reset</button>
@@ -514,9 +540,118 @@
             if (e.key === 'Enter') saveHoliday();
         });
 
+        // ─── OT Rates ────────────────────────────────────────────
+
+        async function loadOTRates() {
+            try {
+                const clientId = AUTH.getClientId();
+                const { data, error } = await supabaseClient
+                    .from('ot_rates')
+                    .select('*')
+                    .eq('client_id', clientId)
+                    .order('role', { ascending: true });
+
+                if (error) throw error;
+                renderOTRates(data || []);
+            } catch (error) {
+                Toast.error('Failed to load OT rates: ' + error.message);
+            }
+        }
+
+        function renderOTRates(rates) {
+            const tbody = document.getElementById('otRatesList');
+            if (!rates.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No OT rates configured</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rates.map(r => `
+                <tr>
+                    <td><strong>${r.role}</strong></td>
+                    <td>
+                        <input type="number" class="setting-input" id="otrate_${r.id}"
+                            value="${parseFloat(r.rate_per_hour).toFixed(2)}"
+                            min="0" step="0.5" style="width: 100px;"
+                            onchange="updateOTRate('${r.id}', this.value)">
+                    </td>
+                    <td>
+                        <button class="btn-delete-holiday" onclick="deleteOTRate('${r.id}', '${r.role}')" title="Delete">❌</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function updateOTRate(id, value) {
+            const rate = parseFloat(value);
+            if (isNaN(rate) || rate < 0) {
+                Toast.error('Invalid rate');
+                return;
+            }
+            try {
+                const clientId = AUTH.getClientId();
+                const { error } = await supabaseClient
+                    .from('ot_rates')
+                    .update({ rate_per_hour: rate })
+                    .eq('id', id)
+                    .eq('client_id', clientId);
+                if (error) throw error;
+                Toast.success('OT rate updated');
+            } catch (error) {
+                Toast.error('Failed to update: ' + error.message);
+            }
+        }
+
+        async function addOTRate() {
+            const role = document.getElementById('newOTRole').value.trim();
+            const rate = parseFloat(document.getElementById('newOTRate').value);
+
+            if (!role) { Toast.error('Please enter a role name'); return; }
+            if (isNaN(rate) || rate < 0) { Toast.error('Please enter a valid rate'); return; }
+
+            try {
+                const clientId = AUTH.getClientId();
+                const { error } = await supabaseClient
+                    .from('ot_rates')
+                    .insert({ client_id: clientId, role: role, rate_per_hour: rate });
+
+                if (error) {
+                    if (error.code === '23505') {
+                        Toast.error('This role already exists');
+                    } else {
+                        throw error;
+                    }
+                    return;
+                }
+
+                document.getElementById('newOTRole').value = '';
+                document.getElementById('newOTRate').value = '';
+                Toast.success('OT rate added');
+                loadOTRates();
+            } catch (error) {
+                Toast.error('Failed to add: ' + error.message);
+            }
+        }
+
+        async function deleteOTRate(id, role) {
+            if (!confirm(`Delete OT rate for "${role}"?`)) return;
+            try {
+                const clientId = AUTH.getClientId();
+                const { error } = await supabaseClient
+                    .from('ot_rates')
+                    .delete()
+                    .eq('id', id)
+                    .eq('client_id', clientId);
+                if (error) throw error;
+                Toast.success('OT rate deleted');
+                loadOTRates();
+            } catch (error) {
+                Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
         // ─── Initialize ─────────────────────────────────────────
         loadSettings();
         loadHolidays();
+        loadOTRates();
     </script>
 </body>
 </html>
