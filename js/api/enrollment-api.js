@@ -42,15 +42,16 @@ const EnrollmentAPI = {
             expiresAt.setHours(expiresAt.getHours() + 1);
 
             const { data, error } = await supabaseClient
-                .from('enrollment_links')
-                .insert({
-                    token: token,
-                    labor_id: laborId,
-                    client_id: clientId,
-                    created_by: session.name,
-                    expires_at: expiresAt.toISOString(),
-                    status: 'pending'
-                })
+    .from('enrollment_links')
+    .insert({
+        token: token,
+        labor_id: laborId,
+        client_id: clientId,
+        created_by: session.name,
+        expires_at: expiresAt.toISOString(),
+        status: 'pending',
+        labor_name: labor.name
+    })
                 .select()
                 .single();
 
