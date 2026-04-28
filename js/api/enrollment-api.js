@@ -153,7 +153,7 @@ const EnrollmentAPI = {
     },
 
     // Get pending enrollments (admin)
-    async getPendingEnrollments() {
+async getPendingEnrollments() {
     try {
         const clientId = AUTH.getClientId();
 
@@ -163,11 +163,8 @@ const EnrollmentAPI = {
             .eq('client_id', clientId)
             .eq('status', 'submitted')
             .order('submitted_at', { ascending: false });
-                .eq('client_id', clientId)
-                .eq('status', 'submitted')
-                .order('submitted_at', { ascending: false });
 
-            if (error) throw error;
+        if (error) throw error;
 
             return { success: true, data: data || [] };
         } catch (error) {
