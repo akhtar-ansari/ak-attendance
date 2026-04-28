@@ -905,7 +905,7 @@ const ReportAPI = {
         const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
         
         return now < nextMonth;
-    }
+    },
     // Check if a date is frozen
 async isDateFrozen(date) {
     try {
