@@ -154,19 +154,15 @@ const EnrollmentAPI = {
 
     // Get pending enrollments (admin)
     async getPendingEnrollments() {
-        try {
-            const clientId = AUTH.getClientId();
+    try {
+        const clientId = AUTH.getClientId();
 
-            const { data, error } = await supabaseClient
-                .from('enrollment_links')
-                .select(`
-                    *,
-                    laborers:labor_id (
-                        labor_id,
-                        name,
-                        iqama_number
-                    )
-                `)
+        const { data, error } = await supabaseClient
+            .from('enrollment_links')
+            .select('*')
+            .eq('client_id', clientId)
+            .eq('status', 'submitted')
+            .order('submitted_at', { ascending: false });
                 .eq('client_id', clientId)
                 .eq('status', 'submitted')
                 .order('submitted_at', { ascending: false });
