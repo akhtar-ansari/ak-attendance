@@ -194,44 +194,51 @@ async getPendingEnrollments() {
     },
 
     // Approve enrollment (admin)
-    async approveEnrollment(enrollmentId) {
-        try {
-            const clientId = AUTH.getClientId();
+async approveEnrollment(enrollmentId) {
+    try {
+        const clientId = AUTH.getClientId();
 
-            // Get the enrollment record
-            const { data: enrollment, error: fetchError } = await supabaseClient
-                .from('enrollment_links')
-                .select('*')
-                .eq('id', enrollmentId)
-                .eq('client_id', clientId)
-                .eq('status', 'submitted')
-                .single();
+        // Get the enrollment record
+        const { data: enrollment, error: fetchError } = await supabaseClient
+            .from('enrollment_links')
+            .select('*')
+            .eq('id', enrollmentId)
+            .eq('client_id', clientId)
+            .eq('status', 'submitted')
+            .single();
 
-            if (fetchError || !enrollment) {
-                throw new Error('Enrollment not found');
-            }
-
-            // Update laborer with face data
-            const { error: laborError } = await supabaseClient
-                .eq('client_id', clientId)
-                .eq('labor_id', enrollment.labor_id);
-
-            if (laborError) throw laborError;
-
-            // Mark enrollment as approved
-            const { error: updateError } = await supabaseClient
-                .from('enrollment_links')
-                .update({ status: 'approved' })
-                .eq('id', enrollmentId);
-
-            if (updateError) throw updateError;
-
-            return { success: true };
-        } catch (error) {
-            console.error('Approve enrollment error:', error);
-            return { success: false, error: error.message };
+        if (fetchError || !enrollment) {
+            throw new Error('Enrollment not found');
         }
-    },
+
+        // Update laborer with face data
+        const { error: laborError } = await supabaseClient
+            .from('laborers')
+            .update({
+                face_descriptor: enrollment.face_descriptor,
+                face_photo_url: enrollment.photo_url,
+                face_enrolled: true,
+                needs_reenrollment: false
+            })
+            .eq('client_id', clientId)
+            .eq('labor_id', enrollment.labor_id);
+
+        if (laborError) throw laborError;
+
+        // Mark enrollment as approved
+        const { error: updateError } = await supabaseClient
+            .from('enrollment_links')
+            .update({ status: 'approved' })
+            .eq('id', enrollmentId);
+
+        if (updateError) throw updateError;
+
+        return { success: true };
+    } catch (error) {
+        console.error('Approve enrollment error:', error);
+        return { success: false, error: error.message };
+    }
+},
 
     // Reject enrollment (admin)
     async rejectEnrollment(enrollmentId) {
