@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Attendance - Overtime</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 25px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        .tab:hover { color: #667eea; }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Filter bar */
+        .filter-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .filter-bar .form-group {
+            margin: 0;
+            flex: 1;
+            min-width: 140px;
+        }
+        .filter-bar label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        /* Bulk actions */
+        .bulk-actions {
+            background: #ebf4ff;
+            border: 1px solid #bee3f8;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .bulk-actions.active { display: flex; }
+
+        /* Table */
+        .ot-table-wrapper {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow-x: auto;
+        }
+        .ot-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+        .ot-table thead tr {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .ot-table thead th {
+            padding: 14px 12px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .ot-table thead th:first-child {
+            border-radius: 10px 0 0 0;
+            width: 40px;
+            text-align: center;
+        }
+        .ot-table thead th:last-child {
+            border-radius: 0 10px 0 0;
+        }
+        .ot-table tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
+        .ot-table tbody tr:hover { background: #f7f8ff; }
+        .ot-table tbody tr.selected { background: #ebf4ff; }
+        .ot-table tbody tr.row-friday { background: #f0fff4; }
+        .ot-table tbody tr.row-friday:hover { background: #e6ffed; }
+        .ot-table tbody tr.row-holiday { background: #fef3c7; }
+        .ot-table tbody tr.row-holiday:hover { background: #fde68a44; }
+        .ot-table tbody tr.row-absent { background: #fff5f5; }
+        .ot-table tbody tr.row-absent:hover { background: #fed7d744; }
+        .ot-table td {
+            padding: 12px;
+            font-size: 13px;
+            color: #333;
+            white-space: nowrap;
+        }
+        .ot-table td:first-child { text-align: center; }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .badge-P { background: #c6f6d5; color: #22543d; }
+        .badge-A { background: #fed7d7; color: #c53030; }
+        .badge-F { background: #c6f6d5; color: #276749; }
+        .badge-NH { background: #fef3c7; color: #92400e; }
+        .badge-HD { background: #bee3f8; color: #2c5282; }
+
+        /* OT Hours input */
+        .ot-input {
+            width: 80px;
+            padding: 6px 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .ot-input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        .ot-input.has-value {
+            border-color: #667eea;
+            background: #ebf4ff;
+            font-weight: 600;
+        }
+
+        /* Hours display */
+        .hours-display {
+            font-weight: 600;
+            color: #333;
+        }
+        .hours-display.low { color: #e53e3e; }
+
+        /* History table */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .history-table thead tr {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .history-table thead th {
+            padding: 12px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: left;
+        }
+        .history-table tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .history-table tbody tr:hover { background: #f7f8ff; }
+        .history-table td {
+            padding: 11px 12px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: #999;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state h3 { color: #666; margin-bottom: 8px; }
+
+        .summary-bar {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #555;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .summary-bar span strong { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕐 Overtime Management</h1>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" onclick="location.href='../dashboard.html'">← Dashboard</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Tabs -->
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('submit', this)">📝 Submit OT</div>
+                <div class="tab" onclick="switchTab('history', this)">📋 History</div>
+            </div>
+
+            <!-- Submit OT Tab -->
+            <div class="tab-content active" id="submitTab">
+
+                <!-- Filter Bar -->
+                <div class="filter-bar">
+                    <div class="form-group">
+                        <label>From Date</label>
+                        <input type="date" id="fromDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>To Date</label>
+                        <input type="date" id="toDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select id="deptFilter" class="form-control">
+                            <option value="">All Departments</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="loadOTData()">🔍 Load</button>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div class="bulk-actions" id="bulkActions">
+                    <span><strong id="selectedCount">0</strong> rows selected</span>
+                    <button type="button" class="btn btn-success btn-sm" onclick="bulkSubmit()">✅ Submit Selected OT</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
+                </div>
+
+                <!-- Summary -->
+                <div class="summary-bar" id="summaryBar" style="display:none;">
+                    <span>Total Rows: <strong id="totalRows">0</strong></span>
+                    <span>With OT Entered: <strong id="otEntered">0</strong></span>
+                    <span>Total OT Hours: <strong id="totalOTHours">0</strong></span>
+                </div>
+
+                <!-- Table -->
+                <div class="ot-table-wrapper">
+                    <table class="ot-table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                </th>
+                                <th>Date</th>
+                                <th>Labor ID</th>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th>Location</th>
+                                <th>Login</th>
+                                <th>Logout</th>
+                                <th>Hours</th>
+                                <th>Status</th>
+                                <th>OT Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody id="otTableBody">
+                            <tr>
+                                <td colspan="11">
+                                    <div class="empty-state">
+                                        <div class="icon">🕐</div>
+                                        <h3>Select date range and click Load</h3>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-content" id="historyTab">
+
+                <!-- Filter Bar -->
+                <div class="filter-bar">
+                    <div class="form-group">
+                        <label>From Date</label>
+                        <input type="date" id="histFromDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>To Date</label>
+                        <input type="date" id="histToDate" class="form-control">
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="loadHistory()">🔍 Load</button>
+                </div>
+
+                <div class="ot-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Submitted</th>
+                                <th>Labor ID</th>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th>OT Date Range</th>
+                                <th>OT Hours</th>
+                                <th>OT Amount (SAR)</th>
+                                <th>Notes</th>
+                                <th>Submitted By</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="9">
+                                    <div class="empty-state">
+                                        <div class="icon">📋</div>
+                                        <h3>Select date range and click Load</h3>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/config/supabase.js"></script>
+    <script src="../js/auth/auth.js"></script>
+    <script src="../js/utils/date-utils.js"></script>
+    <script src="../js/ui/sync-indicator.js"></script>
+    <script src="../js/ui/toast.js"></script>
+    <script src="../js/api/report-api.js"></script>
+
+    <script>
+        if (!AUTH.requireLogin()) {
+            window.location.href = '../index.html';
+        }
+
+        const session = AUTH.getSession();
+        const clientId = AUTH.getClientId();
+
+        let otRows = [];         // All loaded rows
+        let otRates = {};        // role -> rate_per_hour
+        let selectedRows = new Set();
+
+        // ─── Tab Switch ─────────────────────────────────────────
+        function switchTab(tabName, el) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        // ─── Init ───────────────────────────────────────────────
+        async function init() {
+            // Set default dates (current month)
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const today = now.toISOString().split('T')[0];
+            document.getElementById('fromDate').value = firstDay;
+            document.getElementById('toDate').value = today;
+            document.getElementById('histFromDate').value = firstDay;
+            document.getElementById('histToDate').value = today;
+
+            await loadDepartments();
+            await loadOTRates();
+        }
+
+        async function loadDepartments() {
+            const { data } = await supabaseClient
+                .from('departments')
+                .select('id, name')
+                .eq('client_id', clientId)
+                .order('name');
+
+            const select = document.getElementById('deptFilter');
+            (data || []).forEach(d => {
+                select.innerHTML += `<option value="${d.id}">${d.name}</option>`;
+            });
+
+            // Apply supervisor dept filter
+            const deptFilter = AUTH.getDepartmentFilter();
+            if (deptFilter) {
+                select.value = deptFilter;
+                select.disabled = true;
+            }
+        }
+
+        async function loadOTRates() {
+            const { data } = await supabaseClient
+                .from('ot_rates')
+                .select('role, rate_per_hour')
+                .eq('client_id', clientId);
+
+            otRates = {};
+            (data || []).forEach(r => {
+                otRates[r.role.toLowerCase()] = parseFloat(r.rate_per_hour);
+            });
+        }
+
+        function getOTRate(role) {
+            if (!role) return otRates['labor'] || 15;
+            const key = role.toLowerCase().replace(/\s+/g, ' ').trim();
+            // Try exact match first
+            if (otRates[key] !== undefined) return otRates[key];
+            // Try partial match (e.g. "team leader" matches "team lead")
+            for (const [k, v] of Object.entries(otRates)) {
+                if (key.includes(k) || k.includes(key)) return v;
+            }
+            return otRates['labor'] || 15;
+        }
+
+        // ─── Load OT Data ───────────────────────────────────────
+        async function loadOTData() {
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            const deptId = document.getElementById('deptFilter').value;
+
+            if (!fromDate || !toDate) {
+                Toast.error('Please select date range');
+                return;
+            }
+            if (fromDate > toDate) {
+                Toast.error('From date must be before To date');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Loading...');
+
+                // Use existing getCompleteAttendance from report-api
+                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, deptId || null);
+                if (!result.success) throw new Error(result.error);
+
+                // Also get punch locations
+                const { data: punches } = await supabaseClient
+                    .from('punch_records')
+                    .select('labor_id, date, time, location_name')
+                    .eq('client_id', clientId)
+                    .gte('date', fromDate)
+                    .lte('date', toDate)
+                    .order('time', { ascending: true });
+
+                // Build location map (first punch per labor+date)
+                const locationMap = {};
+                (punches || []).forEach(p => {
+                    const key = `${p.labor_id}_${p.date}`;
+                    if (!locationMap[key]) locationMap[key] = p.location_name || '-';
+                });
+
+                // Build rows — one per laborer per day
+                otRows = result.data.map(rec => ({
+                    date: rec.date,
+                    laborId: rec.labor_id,
+                    name: rec.laborName,
+                    role: rec.role || 'Labor',
+                    location: locationMap[`${rec.labor_id}_${rec.date}`] || '-',
+                    firstIn: rec.first_login || null,
+                    lastOut: rec.last_logout || null,
+                    totalHours: rec.total_hours || null,
+                    status: rec.final_status || rec.auto_status || 'A',
+                    isFriday: rec.isFriday,
+                    otHours: 0
+                }));
+
+                renderOTTable();
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load: ' + error.message);
+            }
+        }
+
+        // ─── Render OT Table ────────────────────────────────────
+        function renderOTTable() {
+            const tbody = document.getElementById('otTableBody');
+            selectedRows.clear();
+            document.getElementById('selectAll').checked = false;
+            updateBulkBar();
+
+            if (!otRows.length) {
+                tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="icon">📋</div><h3>No data found</h3></div></td></tr>`;
+                document.getElementById('summaryBar').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('summaryBar').style.display = 'flex';
+            document.getElementById('totalRows').textContent = otRows.length;
+            document.getElementById('otEntered').textContent = 0;
+            document.getElementById('totalOTHours').textContent = '0';
+
+            tbody.innerHTML = otRows.map((row, idx) => {
+                const rowClass = row.status === 'F' ? 'row-friday'
+                    : row.status === 'NH' ? 'row-holiday'
+                    : row.status === 'A' ? 'row-absent' : '';
+
+                const d = new Date(row.date + 'T00:00:00');
+                const dateFormatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                const loginDisplay = row.firstIn ? ReportAPI.formatTime12h(row.firstIn) : '-';
+                const logoutDisplay = row.lastOut ? ReportAPI.formatTime12h(row.lastOut) : '-';
+
+                let hoursDisplay = '-';
+                let hoursClass = '';
+                if (row.totalHours) {
+                    const mins = ReportAPI.calculateHours(row.firstIn, row.lastOut);
+                    const h = (mins / 60).toFixed(1);
+                    hoursDisplay = h + 'h';
+                    if (parseFloat(h) < 10) hoursClass = 'low';
+                } else if (row.status === 'F' || row.status === 'NH') {
+                    hoursDisplay = row.status;
+                }
+
+                return `
+                    <tr class="${rowClass}" id="row_${idx}">
+                        <td>
+                            <input type="checkbox" class="row-checkbox" value="${idx}" onchange="updateSelection()">
+                        </td>
+                        <td>${dateFormatted}</td>
+                        <td><strong>${row.laborId}</strong></td>
+                        <td>${row.name}</td>
+                        <td>${row.role}</td>
+                        <td>${row.location}</td>
+                        <td>${loginDisplay}</td>
+                        <td>${logoutDisplay}</td>
+                        <td><span class="hours-display ${hoursClass}">${hoursDisplay}</span></td>
+                        <td><span class="status-badge badge-${row.status}">${row.status}</span></td>
+                        <td>
+                            <input type="number" class="ot-input" id="ot_${idx}"
+                                min="0" max="24" step="0.5" placeholder="0"
+                                onchange="onOTInput(${idx}, this)"
+                                oninput="onOTInput(${idx}, this)">
+                        </td>
+                    </tr>`;
+            }).join('');
+        }
+
+        // ─── OT Input Handler ───────────────────────────────────
+        function onOTInput(idx, input) {
+            const val = parseFloat(input.value) || 0;
+            otRows[idx].otHours = val;
+
+            if (val > 0) {
+                input.classList.add('has-value');
+            } else {
+                input.classList.remove('has-value');
+            }
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const withOT = otRows.filter(r => r.otHours > 0).length;
+            const totalOT = otRows.reduce((sum, r) => sum + (r.otHours || 0), 0);
+            document.getElementById('otEntered').textContent = withOT;
+            document.getElementById('totalOTHours').textContent = totalOT.toFixed(1);
+        }
+
+        // ─── Selection ──────────────────────────────────────────
+        function updateSelection() {
+            selectedRows.clear();
+            document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
+                selectedRows.add(parseInt(cb.value));
+            });
+            updateBulkBar();
+        }
+
+        function toggleSelectAll() {
+            const checked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('.row-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+            updateSelection();
+        }
+
+        function clearSelection() {
+            document.getElementById('selectAll').checked = false;
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+            selectedRows.clear();
+            updateBulkBar();
+        }
+
+        function updateBulkBar() {
+            const bar = document.getElementById('bulkActions');
+            document.getElementById('selectedCount').textContent = selectedRows.size;
+            if (selectedRows.size > 0) {
+                bar.classList.add('active');
+            } else {
+                bar.classList.remove('active');
+            }
+        }
+
+        // ─── Bulk Submit ─────────────────────────────────────────
+        async function bulkSubmit() {
+            // Get selected rows that have OT hours > 0
+            const toSubmit = Array.from(selectedRows)
+                .map(idx => otRows[idx])
+                .filter(row => row.otHours > 0);
+
+            if (toSubmit.length === 0) {
+                Toast.error('Please enter OT hours for selected rows');
+                return;
+            }
+
+            if (!confirm(`Submit OT for ${toSubmit.length} record(s)?`)) return;
+
+            try {
+                SyncIndicator.show('Submitting OT...');
+
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const row of toSubmit) {
+                    const rate = getOTRate(row.role);
+                    const otAmount = parseFloat((row.otHours * rate).toFixed(2));
+
+                    const { error } = await supabaseClient
+                        .from('overtime_records')
+                        .insert({
+                            client_id: clientId,
+                            labor_id: row.laborId,
+                            from_date: row.date,
+                            to_date: row.date,
+                            ot_hours: row.otHours,
+                            ot_amount: otAmount,
+                            submitted_by: session.name
+                        });
+
+                    if (error) {
+                        console.error('OT insert error:', error);
+                        failCount++;
+                    } else {
+                        successCount++;
+                    }
+                }
+
+                SyncIndicator.hide();
+
+                if (successCount > 0) {
+                    Toast.success(`OT submitted: ${successCount} record(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+                    clearSelection();
+                    // Clear submitted OT inputs
+                    Array.from(selectedRows).forEach(idx => {
+                        const input = document.getElementById(`ot_${idx}`);
+                        if (input) { input.value = ''; input.classList.remove('has-value'); }
+                        otRows[idx].otHours = 0;
+                    });
+                    updateSummary();
+                } else {
+                    Toast.error('All submissions failed');
+                }
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Submit failed: ' + error.message);
+            }
+        }
+
+        // ─── History ─────────────────────────────────────────────
+        async function loadHistory() {
+            const fromDate = document.getElementById('histFromDate').value;
+            const toDate = document.getElementById('histToDate').value;
+
+            if (!fromDate || !toDate) {
+                Toast.error('Please select date range');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Loading history...');
+
+                const { data, error } = await supabaseClient
+                    .from('overtime_records')
+                    .select(`
+                        *,
+                        laborers:labor_id (name, role)
+                    `)
+                    .eq('client_id', clientId)
+                    .gte('from_date', fromDate)
+                    .lte('to_date', toDate)
+                    .order('submitted_at', { ascending: false });
+
+                if (error) throw error;
+
+                renderHistory(data || []);
+                SyncIndicator.hide();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load history: ' + error.message);
+            }
+        }
+
+        function renderHistory(records) {
+            const tbody = document.getElementById('historyTableBody');
+
+            if (!records.length) {
+                tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><h3>No OT records found</h3></div></td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = records.map(r => {
+                const submittedAt = new Date(r.submitted_at).toLocaleDateString('en-GB', {
+                    day: '2-digit', month: 'short', year: 'numeric'
+                });
+                const fromFormatted = new Date(r.from_date + 'T00:00:00').toLocaleDateString('en-GB', {
+                    day: '2-digit', month: 'short'
+                });
+                const toFormatted = r.to_date !== r.from_date
+                    ? ' - ' + new Date(r.to_date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                    : '';
+
+                return `
+                    <tr>
+                        <td>${submittedAt}</td>
+                        <td><strong>${r.labor_id}</strong></td>
+                        <td>${r.laborers?.name || '-'}</td>
+                        <td>${r.laborers?.role || '-'}</td>
+                        <td>${fromFormatted}${toFormatted}</td>
+                        <td><strong>${r.ot_hours}h</strong></td>
+                        <td><strong style="color:#276749;">${parseFloat(r.ot_amount).toFixed(2)} SAR</strong></td>
+                        <td>${r.notes || '-'}</td>
+                        <td>${r.submitted_by || '-'}</td>
+                    </tr>`;
+            }).join('');
+        }
+
+        // ─── Initialize ──────────────────────────────────────────
+        init();
+    </script>
+</body>
+</html>
