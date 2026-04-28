@@ -225,6 +225,39 @@ async approveEnrollment(enrollmentId) {
 
         if (laborError) throw laborError;
 
+        // Delete photo from storage
+        if (enrollment.photo_url) {
+            try {
+                const url = new URL(enrollment.photo_url);
+                const pathParts = url.pathname.split('/storage/v1/object/public/punch-photos/');
+                if (pathParts[1]) {
+                    await supabaseClient.storage
+                        .from('punch-photos')
+                        .remove([pathParts[1]]);
+                }
+            } catch (e) {
+                console.warn('Failed to delete enrollment photo:', e);
+            }
+        }
+
+        // Mark enrollment as approved and clear photo_url
+        const { error: updateError } = await supabaseClient
+            .from('enrollment_links')
+            .update({ 
+                status: 'approved',
+                photo_url: null
+            })
+            .eq('id', enrollmentId);
+
+        if (updateError) throw updateError;
+
+        return { success: true };
+    } catch (error) {
+        console.error('Approve enrollment error:', error);
+        return { success: false, error: error.message };
+    }
+},
+
         // Mark enrollment as approved
         const { error: updateError } = await supabaseClient
             .from('enrollment_links')
