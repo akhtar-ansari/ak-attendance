@@ -690,10 +690,11 @@
 
         // Enroll now (existing flow)
         function enrollNow() {
-            if (!selectedEnrollLabor) return;
-            closeEnrollOptions();
-            window.location.href = `enroll.html?id=${selectedEnrollLabor.labor_id}`;
-        }
+    if (!selectedEnrollLabor) return;
+    const laborId = selectedEnrollLabor.labor_id;
+    closeEnrollOptions();
+    window.location.href = `enroll.html?id=${laborId}`;
+}
 
         // Create enrollment link
         async function createEnrollLink() {
