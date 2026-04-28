@@ -72,6 +72,111 @@
             color: #975a16;
             font-size: 14px;
         }
+
+        /* Holiday Section */
+        .holiday-add-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .holiday-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .holiday-table th {
+            text-align: left;
+            padding: 10px 12px;
+            background: #f5f5f5;
+            color: #555;
+            font-size: 13px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .holiday-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f5f5f5;
+            font-size: 14px;
+            color: #333;
+        }
+        .holiday-table tr:last-child td {
+            border-bottom: none;
+        }
+        .holiday-table .empty-row td {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+        }
+        .btn-delete-holiday {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: #e53e3e;
+        }
+        .btn-delete-holiday:hover {
+            background: #fff5f5;
+        }
+        .nh-badge {
+            background: #667eea;
+            color: white;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-box {
+            background: white;
+            border-radius: 14px;
+            padding: 30px;
+            width: 340px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal-box h4 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        .modal-box .selected-date {
+            font-size: 13px;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .modal-box input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        .modal-box input[type="text"]:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
     </style>
 </head>
 <body>
@@ -91,7 +196,6 @@
             <!-- Attendance Rules -->
             <div class="settings-section">
                 <h3>📋 Attendance Rules</h3>
-                
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Minimum Hours for Present</div>
@@ -99,15 +203,13 @@
                     </div>
                     <input type="number" class="setting-input" id="min_hours_present" min="1" max="24" step="0.5">
                 </div>
-
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Minimum Hours for Half Day</div>
-                        <div class="setting-desc">Laborers must work at least this many hours to be marked Half Day (H)</div>
+                        <div class="setting-desc">Laborers must work at least this many hours to be marked Half Day (HD)</div>
                     </div>
                     <input type="number" class="setting-input" id="min_hours_half_day" min="1" max="24" step="0.5">
                 </div>
-
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Maximum Punches Per Day</div>
@@ -120,7 +222,6 @@
             <!-- Face Recognition -->
             <div class="settings-section">
                 <h3>📸 Face Recognition</h3>
-                
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Minimum Confidence Threshold (%)</div>
@@ -128,7 +229,6 @@
                     </div>
                     <input type="number" class="setting-input" id="confidence_threshold" min="50" max="99">
                 </div>
-
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Re-enrollment Threshold (%)</div>
@@ -136,7 +236,6 @@
                     </div>
                     <input type="number" class="setting-input" id="reenrollment_threshold" min="40" max="99">
                 </div>
-
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Low Confidence Attempts</div>
@@ -149,7 +248,6 @@
             <!-- Photo Storage -->
             <div class="settings-section">
                 <h3>📷 Photo Storage</h3>
-                
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Photo Retention Days</div>
@@ -159,10 +257,49 @@
                 </div>
             </div>
 
+            <!-- Holidays -->
+            <div class="settings-section">
+                <h3>🗓️ National Holidays</h3>
+
+                <div class="holiday-add-row">
+                    <input type="date" id="holidayDatePicker" class="setting-input" style="width: 180px;">
+                    <button type="button" class="btn btn-primary" onclick="openHolidayModal()">+ Add Holiday</button>
+                </div>
+
+                <table class="holiday-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Holiday Name</th>
+                            <th>Code</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="holidayList">
+                        <tr class="empty-row">
+                            <td colspan="4">No holidays added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
             <!-- Save Bar -->
             <div class="save-bar">
                 <button type="button" class="btn btn-secondary" onclick="loadSettings()">🔄 Reset</button>
                 <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holiday Name Modal -->
+    <div class="modal-overlay" id="holidayModal">
+        <div class="modal-box">
+            <h4>Name this Holiday</h4>
+            <div class="selected-date" id="modalDateDisplay"></div>
+            <input type="text" id="holidayNameInput" placeholder="e.g. Eid ul Fitr, National Day" maxlength="100">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeHolidayModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveHoliday()">Save Holiday</button>
             </div>
         </div>
     </div>
@@ -183,19 +320,17 @@
         }
 
         let originalSettings = {};
+        let pendingHolidayDate = null;
 
-        // Load settings
+        // ─── Settings ───────────────────────────────────────────
+
         async function loadSettings() {
             try {
                 SyncIndicator.show('Loading settings...');
-
                 const { data, error } = await supabaseClient
                     .from('settings')
                     .select('*');
-
                 if (error) throw error;
-
-                // Populate form
                 data.forEach(setting => {
                     const input = document.getElementById(setting.key);
                     if (input) {
@@ -203,7 +338,6 @@
                         originalSettings[setting.key] = setting.value;
                     }
                 });
-
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -211,7 +345,6 @@
             }
         }
 
-        // Save settings
         async function saveSettings() {
             const settingsToSave = [
                 'min_hours_present',
@@ -223,10 +356,8 @@
                 'photo_retention_days'
             ];
 
-            // Validation
             const minPresent = parseFloat(document.getElementById('min_hours_present').value);
             const minHalf = parseFloat(document.getElementById('min_hours_half_day').value);
-            
             if (minHalf >= minPresent) {
                 Toast.error('Half day hours must be less than present hours');
                 return;
@@ -234,7 +365,6 @@
 
             const confThreshold = parseInt(document.getElementById('confidence_threshold').value);
             const reenrollThreshold = parseInt(document.getElementById('reenrollment_threshold').value);
-            
             if (reenrollThreshold >= confThreshold) {
                 Toast.error('Re-enrollment threshold must be less than confidence threshold');
                 return;
@@ -242,7 +372,6 @@
 
             try {
                 SyncIndicator.show('Saving settings...');
-
                 for (const key of settingsToSave) {
                     const input = document.getElementById(key);
                     if (input && input.value !== originalSettings[key]) {
@@ -250,32 +379,144 @@
                             .from('settings')
                             .update({ value: input.value, updated_at: new Date().toISOString() })
                             .eq('key', key);
-
                         if (error) throw error;
-
-                        // Log the change
-                        await AUTH.logAction('UPDATE_SETTING', 'settings', key, 
-                            { value: originalSettings[key] }, 
+                        await AUTH.logAction('UPDATE_SETTING', 'settings', key,
+                            { value: originalSettings[key] },
                             { value: input.value }
                         );
-
                         originalSettings[key] = input.value;
                     }
                 }
-
                 SyncIndicator.hide();
                 Toast.success('Settings saved successfully!');
-
             } catch (error) {
                 SyncIndicator.hide();
                 Toast.error('Failed to save settings: ' + error.message);
             }
         }
 
-        // Initialize
+        // ─── Holidays ───────────────────────────────────────────
+
+        async function loadHolidays() {
+            try {
+                const clientId = AUTH.getClientId();
+                const { data, error } = await supabaseClient
+                    .from('holidays')
+                    .select('*')
+                    .eq('client_id', clientId)
+                    .order('date', { ascending: true });
+
+                if (error) throw error;
+                renderHolidays(data || []);
+            } catch (error) {
+                Toast.error('Failed to load holidays: ' + error.message);
+            }
+        }
+
+        function renderHolidays(holidays) {
+            const tbody = document.getElementById('holidayList');
+            if (!holidays.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No holidays added yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = holidays.map(h => {
+                const d = new Date(h.date + 'T00:00:00');
+                const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                return `
+                    <tr>
+                        <td>${formatted}</td>
+                        <td>${h.name}</td>
+                        <td><span class="nh-badge">NH</span></td>
+                        <td>
+                            <button class="btn-delete-holiday" onclick="deleteHoliday('${h.id}', '${h.name}')" title="Delete">❌</button>
+                        </td>
+                    </tr>`;
+            }).join('');
+        }
+
+        function openHolidayModal() {
+            const datePicker = document.getElementById('holidayDatePicker');
+            if (!datePicker.value) {
+                Toast.error('Please select a date first');
+                return;
+            }
+            pendingHolidayDate = datePicker.value;
+            const d = new Date(pendingHolidayDate + 'T00:00:00');
+            document.getElementById('modalDateDisplay').textContent =
+                d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+            document.getElementById('holidayNameInput').value = '';
+            document.getElementById('holidayModal').classList.add('active');
+            setTimeout(() => document.getElementById('holidayNameInput').focus(), 100);
+        }
+
+        function closeHolidayModal() {
+            document.getElementById('holidayModal').classList.remove('active');
+            pendingHolidayDate = null;
+        }
+
+        async function saveHoliday() {
+            const name = document.getElementById('holidayNameInput').value.trim();
+            if (!name) {
+                Toast.error('Please enter a holiday name');
+                return;
+            }
+            if (!pendingHolidayDate) return;
+
+            try {
+                const clientId = AUTH.getClientId();
+                const { error } = await supabaseClient
+                    .from('holidays')
+                    .insert({ client_id: clientId, date: pendingHolidayDate, name: name });
+
+                if (error) {
+                    if (error.code === '23505') {
+                        Toast.error('A holiday already exists on this date');
+                    } else {
+                        throw error;
+                    }
+                    return;
+                }
+
+                closeHolidayModal();
+                document.getElementById('holidayDatePicker').value = '';
+                Toast.success('Holiday saved!');
+                loadHolidays();
+            } catch (error) {
+                Toast.error('Failed to save holiday: ' + error.message);
+            }
+        }
+
+        async function deleteHoliday(id, name) {
+            if (!confirm(`Delete holiday "${name}"?`)) return;
+            try {
+                const clientId = AUTH.getClientId();
+                const { error } = await supabaseClient
+                    .from('holidays')
+                    .delete()
+                    .eq('id', id)
+                    .eq('client_id', clientId);
+
+                if (error) throw error;
+                Toast.success('Holiday deleted');
+                loadHolidays();
+            } catch (error) {
+                Toast.error('Failed to delete holiday: ' + error.message);
+            }
+        }
+
+        // Close modal on overlay click
+        document.getElementById('holidayModal').addEventListener('click', function(e) {
+            if (e.target === this) closeHolidayModal();
+        });
+
+        // Enter key saves holiday
+        document.getElementById('holidayNameInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') saveHoliday();
+        });
+
+        // ─── Initialize ─────────────────────────────────────────
         loadSettings();
+        loadHolidays();
     </script>
 </body>
-
 </html>
-
