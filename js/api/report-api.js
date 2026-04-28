@@ -906,4 +906,79 @@ const ReportAPI = {
         
         return now < nextMonth;
     }
+    // Check if a date is frozen
+async isDateFrozen(date) {
+    try {
+        const clientId = AUTH.getClientId();
+        
+        const { data, error } = await supabaseClient
+            .from('attendance_freeze')
+            .select('id')
+            .eq('client_id', clientId)
+            .eq('date', date)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+
+        return { success: true, frozen: !!data };
+    } catch (error) {
+        console.error('Check freeze error:', error);
+        return { success: false, frozen: false };
+    }
+},
+
+// Freeze a date (admin only)
+async freezeDate(date) {
+    try {
+        if (!AUTH.hasRole('admin')) {
+            return { success: false, error: 'Only admin can freeze attendance' };
+        }
+
+        const clientId = AUTH.getClientId();
+        const session = AUTH.getSession();
+
+        const { error } = await supabaseClient
+            .from('attendance_freeze')
+            .insert({
+                client_id: clientId,
+                date: date,
+                frozen_by: session.name
+            });
+
+        if (error) {
+            if (error.code === '23505') {
+                return { success: false, error: 'This date is already frozen' };
+            }
+            throw error;
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Freeze date error:', error);
+        return { success: false, error: error.message };
+    }
+},
+
+// Get frozen dates for a range
+async getFrozenDates(fromDate, toDate) {
+    try {
+        const clientId = AUTH.getClientId();
+
+        const { data, error } = await supabaseClient
+            .from('attendance_freeze')
+            .select('date, frozen_by, frozen_at')
+            .eq('client_id', clientId)
+            .gte('date', fromDate)
+            .lte('date', toDate);
+
+        if (error) throw error;
+
+        return { success: true, data: data || [] };
+    } catch (error) {
+        console.error('Get frozen dates error:', error);
+        return { success: false, data: [] };
+    }
+}
 };
