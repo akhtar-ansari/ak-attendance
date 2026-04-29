@@ -454,7 +454,7 @@
                         <td>${h.name}</td>
                         <td><span class="nh-badge">NH</span></td>
                         <td>
-                            <button class="btn-delete-holiday" onclick="deleteHoliday('${h.id}', '${h.name}')" title="Delete">❌</button>
+                            <button class="btn-delete-holiday" onclick="deleteHoliday('${h.id}', '${h.name}', '${h.date}')" title="Delete">❌</button>
                         </td>
                     </tr>`;
             }).join('');
@@ -512,21 +512,45 @@
             }
         }
 
-        async function deleteHoliday(id, name) {
+        async function deleteHoliday(id, name, dateStr) {
             if (!confirm(`Delete holiday "${name}"?`)) return;
             try {
                 const clientId = AUTH.getClientId();
-                const { error } = await supabaseClient
-                    .from('holidays')
-                    .delete()
-                    .eq('id', id)
-                    .eq('client_id', clientId);
 
-                if (error) throw error;
-                Toast.success('Holiday deleted');
+                // Check if this holiday's month has any frozen dates
+                const monthStart = dateStr.substring(0, 7) + '-01';
+                const monthEnd = dateStr.substring(0, 7) + '-31';
+
+                const { data: frozen } = await supabaseClient
+                    .from('frozen_dates')
+                    .select('id')
+                    .eq('client_id', clientId)
+                    .gte('date', monthStart)
+                    .lte('date', monthEnd)
+                    .limit(1);
+
+                if (frozen && frozen.length > 0) {
+                    // Month is frozen — soft delete only
+                    const { error } = await supabaseClient
+                        .from('holidays')
+                        .update({ is_active: false })
+                        .eq('id', id)
+                        .eq('client_id', clientId);
+                    if (error) throw error;
+                    Toast.success('Month is frozen — holiday hidden from future reports');
+                } else {
+                    // Month not frozen — hard delete
+                    const { error } = await supabaseClient
+                        .from('holidays')
+                        .delete()
+                        .eq('id', id)
+                        .eq('client_id', clientId);
+                    if (error) throw error;
+                    Toast.success('Holiday deleted');
+                }
                 loadHolidays();
             } catch (error) {
-                Toast.error('Failed to delete holiday: ' + error.message);
+                Toast.error('Failed to delete: ' + error.message);
             }
         }
 
