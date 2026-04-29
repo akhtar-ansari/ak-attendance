@@ -495,4 +495,563 @@
             const departmentId = document.getElementById('departmentFilter').value;
             const laborSearch = document.getElementById('laborFilter').value.trim().toLowerCase();
             const statusFilter = document.getElementById('statusFilterDropdown').value;
-            const lopFilter = document.getEleme
+            const lopFilter = document.getElementById('lopFilter').value;
+
+            if (!fromDate || !toDate) {
+                Toast.error('Please select date range');
+                return;
+            }
+            if (new Date(fromDate) > new Date(toDate)) {
+                Toast.error('From date cannot be after To date');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Generating report...');
+                selectedItems.clear();
+                updateBulkActions();
+
+                const frozenResult = await ReportAPI.getFrozenDates(fromDate, toDate);
+                frozenDates = {};
+                if (frozenResult.success) {
+                    frozenResult.data.forEach(f => {
+                        frozenDates[f.date] = { frozen_by: f.frozen_by, frozen_at: f.frozen_at };
+                    });
+                }
+
+                const isSingleDate = fromDate === toDate;
+                currentDateIsFrozen = isSingleDate && isDateFrozen(fromDate);
+
+                if (isAdmin && isSingleDate && !currentDateIsFrozen) {
+                    document.getElementById('freezeBtn').style.display = 'inline-block';
+                } else {
+                    document.getElementById('freezeBtn').style.display = 'none';
+                }
+
+                if (currentDateIsFrozen) {
+                    const freezeInfo = frozenDates[fromDate];
+                    document.getElementById('frozenBanner').style.display = 'flex';
+                    document.getElementById('frozenByInfo').textContent = 
+                        `Frozen by ${freezeInfo.frozen_by} on ${new Date(freezeInfo.frozen_at).toLocaleString()}`;
+                } else {
+                    document.getElementById('frozenBanner').style.display = 'none';
+                }
+
+                // Load OT records alongside attendance
+                await loadOTRecords(fromDate, toDate);
+
+                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, departmentId);
+                if (!result.success) throw new Error(result.error);
+
+                reportData = result.data;
+                filteredData = [...reportData];
+
+                if (laborSearch) {
+                    filteredData = filteredData.filter(r => {
+                        return r.labor_id.toLowerCase().includes(laborSearch) || 
+                               (r.iqamaNumber && r.iqamaNumber.toLowerCase().includes(laborSearch)) ||
+                               (r.laborName && r.laborName.toLowerCase().includes(laborSearch));
+                    });
+                }
+
+                if (statusFilter === 'present') {
+                    filteredData = filteredData.filter(r => r.final_status === 'P');
+                } else if (statusFilter === 'absent') {
+                    filteredData = filteredData.filter(r => r.final_status === 'A');
+                } else if (statusFilter === 'halfday') {
+                    filteredData = filteredData.filter(r => r.final_status === 'H');
+                } else if (statusFilter === 'no-punch') {
+                    filteredData = filteredData.filter(r => !r.hasRecord && r.final_status === 'A');
+                }
+
+                if (lopFilter === 'pending') {
+                    filteredData = filteredData.filter(r => 
+                        (r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by
+                    );
+                } else if (lopFilter === 'approved') {
+                    filteredData = filteredData.filter(r => r.approved_by);
+                }
+
+                const presentCount = filteredData.filter(r => r.final_status === 'P').length;
+                const halfDayCount = filteredData.filter(r => r.final_status === 'H').length;
+                const absentCount = filteredData.filter(r => r.final_status === 'A').length;
+                const noPunchCount = filteredData.filter(r => !r.hasRecord && r.final_status === 'A').length;
+                
+                const recordsWithHours = filteredData.filter(r => r.total_hours && parseFloat(r.total_hours) > 0);
+                const totalHours = recordsWithHours.reduce((sum, r) => sum + parseFloat(r.total_hours), 0);
+                const avgHours = recordsWithHours.length > 0 ? (totalHours / recordsWithHours.length).toFixed(1) : 0;
+
+                document.getElementById('totalRecords').textContent = filteredData.length;
+                document.getElementById('presentCount').textContent = presentCount;
+                document.getElementById('halfDayCount').textContent = halfDayCount;
+                document.getElementById('absentCount').textContent = absentCount;
+                document.getElementById('noPunchCount').textContent = noPunchCount;
+                document.getElementById('avgHours').textContent = avgHours;
+                document.getElementById('summarySection').style.display = 'grid';
+
+                renderTable();
+                SyncIndicator.hide();
+                Toast.success(`Found ${filteredData.length} records`);
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to generate report: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('reportTable');
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="14" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filteredData.map(record => {
+                const recordKey = getRecordKey(record);
+                const isNoPunch = !record.hasRecord;
+                const rowClass = isNoPunch ? 'no-punch-row' : '';
+                
+                const autoStatusClass = `status-${record.auto_status}`;
+                const autoStatusText = record.auto_status || 'A';
+                const finalStatusClass = `status-${record.final_status}`;
+                const finalStatusText = record.final_status || 'A';
+
+                const dateFrozen = isDateFrozen(record.date);
+                const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') && 
+                                   !record.approved_by && 
+                                   isDateApprovable(record.date) &&
+                                   !record.isFriday &&
+                                   !dateFrozen;
+                
+                const wasApproved = record.approved_by && record.final_status === 'P';
+                
+                let checkboxHtml = '';
+                if (isAdmin && canApprove) {
+                    const isChecked = selectedItems.has(recordKey) ? 'checked' : '';
+                    checkboxHtml = `<input type="checkbox" class="lop-checkbox" data-key="${recordKey}" ${isChecked} onchange="toggleSelect('${recordKey}')">`;
+                } else {
+                    checkboxHtml = `<input type="checkbox" class="lop-checkbox" disabled>`;
+                }
+
+                let lopActionHtml = '';
+                if (record.isFriday) {
+                    lopActionHtml = '<span class="frozen-badge">Friday</span>';
+                } else if (dateFrozen) {
+                    lopActionHtml = '<span class="frozen-badge">🔒 Frozen</span>';
+                } else if (wasApproved) {
+                    lopActionHtml = `
+                        <div class="lop-inline">
+                            <span class="badge status-P">${record.auto_status} → P</span>
+                            <button class="reason-btn" onclick="viewReason('${recordKey}')" title="View reason">💬</button>
+                            <span style="font-size: 11px; color: #38a169; white-space: nowrap;">by ${record.approved_by}</span>
+                            ${isAdmin && !dateFrozen && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+                        </div>
+                    `;
+                } else if (canApprove) {
+                    lopActionHtml = `<button class="approve-btn" onclick="openApproveModal('${recordKey}')">✓ Approve</button>`;
+                } else if (!isDateApprovable(record.date) && (record.auto_status === 'H' || record.auto_status === 'A')) {
+                    lopActionHtml = `<span class="frozen-badge">🔒 Closed</span>`;
+                } else {
+                    lopActionHtml = '-';
+                }
+
+                // OT column
+                const otKey = `${record.labor_id}_${record.date}`;
+                const otHours = otMap[otKey];
+                const otDisplay = otHours ? `<span class="ot-badge">🕐 ${otHours}h</span>` : '-';
+
+                const photoBtn = record.hasRecord 
+                    ? `<button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">📷 View</button>`
+                    : `<button class="photo-btn" disabled title="No punch">📷 -</button>`;
+
+                const noPunchBadge = isNoPunch ? '<span class="no-punch-badge">No Punch</span>' : '';
+
+                return `
+                    <tr class="${rowClass}">
+                        <td>${checkboxHtml}</td>
+                        <td>${DateUtils.formatDate(record.date)}</td>
+                        <td><strong>${record.labor_id}</strong></td>
+                        <td>${record.laborName || 'Unknown'} ${noPunchBadge}</td>
+                        <td>${record.role || 'Labor'}</td>
+                        <td>${record.punchLocation || '-'}</td>
+                        <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
+                        <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
+                        <td>${record.total_hours ? parseFloat(record.total_hours).toFixed(1) + 'h' : '-'}</td>
+                        <td><span class="badge ${autoStatusClass}">${autoStatusText}</span></td>
+                        <td><span class="badge ${finalStatusClass}">${finalStatusText}</span></td>
+                        <td>${lopActionHtml}</td>
+                        <td>${otDisplay}</td>
+                        <td>${photoBtn}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            updateSelectAllState();
+        }
+
+        // ============ FREEZE FUNCTIONS ============
+        function freezeSelectedDate() {
+            const fromDate = document.getElementById('fromDate').value;
+            document.getElementById('freezeDateDisplay').textContent = DateUtils.formatDate(fromDate);
+            document.getElementById('freezeModal').classList.add('active');
+        }
+
+        function closeFreezeModal() {
+            document.getElementById('freezeModal').classList.remove('active');
+        }
+
+        async function confirmFreeze() {
+            const fromDate = document.getElementById('fromDate').value;
+            try {
+                SyncIndicator.show('Freezing...');
+                const result = await ReportAPI.freezeDate(fromDate);
+                if (!result.success) throw new Error(result.error);
+                closeFreezeModal();
+                Toast.success('Date frozen successfully!');
+                await generateReport();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to freeze: ' + error.message);
+            }
+        }
+
+        // ============ SELECTION FUNCTIONS ============
+        function toggleSelect(key) {
+            if (selectedItems.has(key)) {
+                selectedItems.delete(key);
+            } else {
+                selectedItems.add(key);
+            }
+            updateBulkActions();
+            updateSelectAllState();
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.lop-checkbox[data-key]');
+            
+            if (selectAllCheckbox.checked) {
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    selectedItems.add(cb.dataset.key);
+                });
+            } else {
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    selectedItems.delete(cb.dataset.key);
+                });
+            }
+            updateBulkActions();
+        }
+
+        function updateSelectAllState() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.lop-checkbox[data-key]');
+            const checkedCount = document.querySelectorAll('.lop-checkbox[data-key]:checked').length;
+            
+            if (checkboxes.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+
+        function updateBulkActions() {
+            const bulkActions = document.getElementById('bulkActions');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            if (selectedItems.size > 0 && isAdmin) {
+                bulkActions.classList.add('active');
+                selectedCount.textContent = selectedItems.size;
+            } else {
+                bulkActions.classList.remove('active');
+            }
+        }
+
+        function clearSelection() {
+            selectedItems.clear();
+            document.querySelectorAll('.lop-checkbox[data-key]').forEach(cb => cb.checked = false);
+            document.getElementById('selectAll').checked = false;
+            updateBulkActions();
+        }
+
+        // ============ APPROVE FUNCTIONS ============
+        function getRecordByKey(key) {
+            return filteredData.find(r => getRecordKey(r) === key);
+        }
+
+        function openApproveModal(recordKey) {
+            const record = getRecordByKey(recordKey);
+            if (!record) return;
+
+            pendingApproveRecord = record;
+            pendingBulkApprove = false;
+            
+            const noPunchNote = !record.hasRecord 
+                ? '<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ This labor did not punch. A new attendance record will be created.</div>'
+                : '';
+
+            document.getElementById('approveModalTitle').textContent = 'Approve LOP';
+            document.getElementById('approveInfo').innerHTML = `
+                <div><strong>Labor:</strong> ${record.laborName || record.labor_id} (${record.labor_id})</div>
+                <div><strong>Date:</strong> ${DateUtils.formatDate(record.date)}</div>
+                <div><strong>Status:</strong> ${record.auto_status} → P</div>
+                ${noPunchNote}
+            `;
+            document.getElementById('approveReason').value = '';
+            document.getElementById('approveModal').classList.add('active');
+        }
+
+        function openBulkApproveModal() {
+            if (selectedItems.size === 0) {
+                Toast.error('No records selected');
+                return;
+            }
+
+            pendingApproveRecord = null;
+            pendingBulkApprove = true;
+            
+            let noPunchCount = 0;
+            selectedItems.forEach(key => {
+                const record = getRecordByKey(key);
+                if (record && !record.hasRecord) noPunchCount++;
+            });
+
+            const noPunchNote = noPunchCount > 0 
+                ? `<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ ${noPunchCount} record(s) have no punch - new attendance records will be created.</div>`
+                : '';
+
+            document.getElementById('approveModalTitle').textContent = 'Bulk Approve LOP';
+            document.getElementById('approveInfo').innerHTML = `
+                <div><strong>Selected Records:</strong> ${selectedItems.size}</div>
+                <div style="color: #718096; font-size: 13px; margin-top: 5px;">All selected Half Day / Absent records will be marked as Present</div>
+                ${noPunchNote}
+            `;
+            document.getElementById('approveReason').value = '';
+            document.getElementById('approveModal').classList.add('active');
+        }
+
+        function closeApproveModal() {
+            document.getElementById('approveModal').classList.remove('active');
+            pendingApproveRecord = null;
+            pendingBulkApprove = false;
+        }
+
+        async function confirmApprove() {
+            const reason = document.getElementById('approveReason').value.trim();
+            if (!reason) {
+                Toast.error('Reason is mandatory');
+                return;
+            }
+
+            try {
+                SyncIndicator.show('Approving...');
+
+                if (pendingBulkApprove) {
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    for (const key of selectedItems) {
+                        const record = getRecordByKey(key);
+                        if (!record) continue;
+
+                        let result;
+                        if (record.id) {
+                            result = await ReportAPI.approveLOP(record.id, reason);
+                        } else {
+                            result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                        }
+
+                        if (result.success) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    }
+
+                    if (successCount > 0) {
+                        Toast.success(`Approved ${successCount} records${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+                    } else {
+                        Toast.error('Failed to approve records');
+                    }
+                    clearSelection();
+                } else {
+                    const record = pendingApproveRecord;
+                    let result;
+
+                    if (record.id) {
+                        result = await ReportAPI.approveLOP(record.id, reason);
+                    } else {
+                        result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                    }
+                    
+                    if (!result.success) throw new Error(result.error);
+                    Toast.success('LOP approved successfully');
+                }
+
+                closeApproveModal();
+                await generateReport();
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to approve: ' + error.message);
+            }
+        }
+
+        async function undoApproval(recordId) {
+            if (!confirm('Are you sure you want to undo this approval?')) return;
+
+            try {
+                SyncIndicator.show('Undoing...');
+                const result = await ReportAPI.undoLOP(recordId, 'A');
+                if (!result.success) throw new Error(result.error);
+                Toast.success('Approval undone');
+                await generateReport();
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to undo: ' + error.message);
+            }
+        }
+
+        // ============ VIEW REASON ============
+        function viewReason(recordKey) {
+            const record = getRecordByKey(recordKey);
+            if (!record) return;
+            
+            document.getElementById('reasonModalBody').innerHTML = `
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Labor</div>
+                    <div style="font-weight: 600;">${record.laborName || record.labor_id} (${record.labor_id})</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Date</div>
+                    <div style="font-weight: 600;">${DateUtils.formatDate(record.date)}</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Status Change</div>
+                    <div><span class="badge status-${record.auto_status}">${record.auto_status}</span> → <span class="badge status-P">P</span></div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Approved By</div>
+                    <div style="font-weight: 600;">${record.approved_by}</div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <div style="color: #666; font-size: 12px;">Approved At</div>
+                    <div>${record.approved_at ? new Date(record.approved_at).toLocaleString() : '-'}</div>
+                </div>
+                <div style="background: #f7fafc; padding: 15px; border-radius: 8px;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 5px;">Reason</div>
+                    <div>${record.lop_reason || '-'}</div>
+                </div>
+            `;
+            document.getElementById('reasonModal').classList.add('active');
+        }
+
+        function closeReasonModal() {
+            document.getElementById('reasonModal').classList.remove('active');
+        }
+
+        // ============ PHOTO MODAL ============
+        async function viewPhotos(laborId, date) {
+            try {
+                SyncIndicator.show('Loading photos...');
+                const result = await ReportAPI.getPunchPhotos(laborId, date);
+                if (!result.success) throw new Error(result.error);
+
+                const photos = result.data;
+                const record = filteredData.find(r => r.labor_id === laborId && r.date === date);
+
+                document.getElementById('photoModalTitle').textContent = 
+                    `${record?.laborName || laborId} - ${DateUtils.formatDate(date)}`;
+
+                if (photos.length === 0) {
+                    document.getElementById('photoModalBody').innerHTML = `
+                        <div class="text-center p-20 text-muted">
+                            <div style="font-size: 48px; margin-bottom: 15px;">📷</div>
+                            <p>No punch photos available for this date</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('photoModalBody').innerHTML = photos.map(punch => `
+                        <div style="display: flex; gap: 20px; align-items: center; padding: 15px; border-bottom: 1px solid #e0e0e0;">
+                            <div style="flex-shrink: 0;">
+                                ${punch.photo_url ? 
+                                    `<img src="${punch.photo_url}" alt="Punch photo" 
+                                         style="width: 120px; height: 90px; object-fit: cover; border-radius: 8px; cursor: pointer;"
+                                         onclick="window.open('${punch.photo_url}', '_blank')">` :
+                                    `<div style="width: 120px; height: 90px; background: #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999;">No Photo</div>`
+                                }
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">🕐 Punch</div>
+                                <div style="color: #666; font-size: 14px;">Time: ${DateUtils.formatTime(punch.time)}</div>
+                                <div style="color: #666; font-size: 14px;">Location: ${punch.location_name || '-'}</div>
+                                <div style="color: #666; font-size: 14px;">Confidence: ${punch.confidence || '-'}%</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('photoModal').classList.add('active');
+                SyncIndicator.hide();
+
+            } catch (error) {
+                SyncIndicator.hide();
+                Toast.error('Failed to load photos: ' + error.message);
+            }
+        }
+
+        function closePhotoModal() {
+            document.getElementById('photoModal').classList.remove('active');
+        }
+
+        // ============ EXPORT CSV ============
+        function exportCSV() {
+            if (filteredData.length === 0) {
+                Toast.error('No data to export. Generate report first.');
+                return;
+            }
+
+            const data = filteredData.map(record => {
+                const otKey = `${record.labor_id}_${record.date}`;
+                return {
+                    'Date': DateUtils.formatDate(record.date),
+                    'Labor ID': record.labor_id,
+                    'Name': record.laborName || 'Unknown',
+                    'Iqama': record.iqamaNumber || '-',
+                    'Department': record.departmentName || '-',
+                    'Login': DateUtils.formatTimeShort(record.first_login) || '-',
+                    'Logout': DateUtils.formatTimeShort(record.last_logout) || '-',
+                    'Hours': record.total_hours ? parseFloat(record.total_hours).toFixed(1) : '0',
+                    'Auto Status': record.auto_status,
+                    'Final Status': record.final_status,
+                    'Has Punch': record.hasRecord ? 'Yes' : 'No',
+                    'Approved By': record.approved_by || '-',
+                    'LOP Reason': record.lop_reason || '-',
+                    'OT Hours': otMap[otKey] || ''
+                };
+            });
+
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            
+            CSVHandler.exportToCSV(data, `attendance_report_${fromDate}_to_${toDate}`);
+            Toast.success('CSV exported!');
+        }
+
+        // Initialize
+        setDefaultDates();
+        loadFilters();
+    </script>
+</body>
+</html>
