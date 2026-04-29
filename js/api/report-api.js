@@ -568,6 +568,7 @@ const ReportAPI = {
                 .from('holidays')
                 .select('date, name')
                 .eq('client_id', AUTH.getClientId())
+                .eq('is_active', true)
                 .gte('date', startDate)
                 .lte('date', endDate);
 
