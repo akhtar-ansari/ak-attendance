@@ -212,11 +212,18 @@ const EnrollmentAPI = {
                 throw new Error('Enrollment not found');
             }
 
-            // 2. Save face descriptor to laborers (no photo URL saved)
+            // 2. Parse descriptor safely and save to laborers (no photo URL saved)
+            let parsedDescriptor = enrollment.face_descriptor;
+            if (typeof parsedDescriptor === 'string') {
+                // Strip any extra wrapping quotes from double-serialization
+                parsedDescriptor = parsedDescriptor.replace(/^"|"$/g, '');
+                parsedDescriptor = JSON.parse(parsedDescriptor);
+            }
+
             const { error: laborError } = await supabaseClient
                 .from('laborers')
                 .update({
-                    face_descriptor: enrollment.face_descriptor,
+                    face_descriptor: parsedDescriptor,
                     face_enrolled: true,
                     needs_reenrollment: false,
                     face_photo_url: null
