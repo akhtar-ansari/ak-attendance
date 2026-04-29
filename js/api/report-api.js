@@ -762,7 +762,7 @@ const ReportAPI = {
                 const totalPaidDays = presentCount + fridayCount + holidayCount + (halfDayCount * 0.5);
 
                 // Calculate salary: (totalPaidDays / 30) * monthlySalary
-                const calculatedSalary = Math.round((totalPaidDays / 30) * monthlySalary);
+                const calculatedSalary = Math.round((totalPaidDays / lastDay) * monthlySalary);
 
                 return {
                     laborId: laborer.labor_id,
