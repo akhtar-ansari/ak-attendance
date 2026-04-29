@@ -37,9 +37,7 @@
             top: 0;
             z-index: 2;
         }
-        .billing-table th.day-group {
-            min-width: 110px;
-        }
+        .billing-table th.day-group { min-width: 110px; }
         .billing-table th.sub-header {
             background: #5a67d8;
             font-size: 9px;
@@ -74,49 +72,18 @@
             color: #2b6cb0;
             font-weight: 500;
         }
-        /* Status colors */
-        .billing-table td.status-P {
-            background: #c6f6d5;
-            color: #22543d;
-            font-weight: 600;
-        }
-        .billing-table td.status-H {
-            background: #fefcbf;
-            color: #975a16;
-            font-weight: 600;
-        }
-        .billing-table td.status-A {
-            background: #fed7d7;
-            color: #c53030;
-            font-weight: 600;
-        }
-        .billing-table td.status-F {
-            background: #e2e8f0;
-            color: #718096;
-            font-weight: 600;
-        }
-        .billing-table td.total-cell {
-            background: #edf2f7;
-            font-weight: 600;
-        }
-        .billing-table td.hours-total {
-            background: #bee3f8;
-            font-weight: 700;
-            color: #2b6cb0;
-        }
-        .billing-table td.paid-cell {
-            background: #c6f6d5;
-            font-weight: 700;
-            color: #22543d;
-        }
-        .billing-table td.salary-cell {
-            background: #faf5ff;
-            font-weight: 700;
-            color: #6b46c1;
-        }
-        .billing-table tr:hover td:not(.labor-id) {
-            opacity: 0.9;
-        }
+        .billing-table td.status-P { background: #c6f6d5; color: #22543d; font-weight: 600; }
+        .billing-table td.status-H { background: #fefcbf; color: #975a16; font-weight: 600; }
+        .billing-table td.status-A { background: #fed7d7; color: #c53030; font-weight: 600; }
+        .billing-table td.status-F { background: #e2e8f0; color: #718096; font-weight: 600; }
+        .billing-table td.status-NH { background: #fef3c7; color: #92400e; font-weight: 600; }
+        .billing-table td.total-cell { background: #edf2f7; font-weight: 600; }
+        .billing-table td.hours-total { background: #bee3f8; font-weight: 700; color: #2b6cb0; }
+        .billing-table td.paid-cell { background: #c6f6d5; font-weight: 700; color: #22543d; }
+        .billing-table td.salary-cell { background: #faf5ff; font-weight: 700; color: #6b46c1; }
+        .billing-table td.ot-hours-cell { background: #ebf4ff; font-weight: 700; color: #2b6cb0; }
+        .billing-table td.ot-amount-cell { background: #e6fffa; font-weight: 700; color: #234e52; }
+        .billing-table tr:hover td:not(.labor-id) { opacity: 0.9; }
         .summary-row td {
             background: #667eea !important;
             color: white !important;
@@ -161,16 +128,9 @@
             font-size: 13px;
             transition: all 0.2s;
         }
-        .month-checkbox:hover {
-            background: #e2e8f0;
-        }
-        .month-checkbox input {
-            cursor: pointer;
-        }
-        .month-checkbox.selected {
-            background: #667eea;
-            color: white;
-        }
+        .month-checkbox:hover { background: #e2e8f0; }
+        .month-checkbox input { cursor: pointer; }
+        .month-checkbox.selected { background: #667eea; color: white; }
     </style>
 </head>
 <body>
@@ -188,9 +148,7 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Year</label>
-                        <select id="yearSelect" class="form-control">
-                            <!-- Years will be populated -->
-                        </select>
+                        <select id="yearSelect" class="form-control"></select>
                     </div>
                     <div class="form-group">
                         <label>Department</label>
@@ -249,7 +207,11 @@
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #e2e8f0; color: #718096;">F</div>
-                    <span>Friday (Holiday)</span>
+                    <span>Friday</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fef3c7; color: #92400e;">NH</div>
+                    <span>National Holiday</span>
                 </div>
             </div>
 
@@ -262,10 +224,7 @@
         </div>
     </div>
 
-    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <!-- App Scripts -->
     <script src="../js/config/supabase.js"></script>
     <script src="../js/auth/auth.js"></script>
     <script src="../js/utils/date-utils.js"></script>
@@ -275,47 +234,41 @@
     <script src="../js/api/report-api.js"></script>
 
     <script>
-        // Require login
         if (!AUTH.requireLogin()) {
             window.location.href = '../index.html';
         }
 
         const session = AUTH.getSession();
         let departments = [];
-        let allMonthsData = []; // Store data for all selected months
+        let allMonthsData = [];
+        let otData = {}; // key: labor_id -> total OT hours & amount for selected period
 
-        // Get ordinal suffix for day
         function getOrdinal(n) {
             const s = ['th', 'st', 'nd', 'rd'];
             const v = n % 100;
             return n + (s[(v - 20) % 10] || s[v] || s[0]);
         }
 
-        // Get month name
         function getMonthName(month) {
-            const months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
+            const months = ['', 'January', 'February', 'March', 'April', 'May', 'June',
                            'July', 'August', 'September', 'October', 'November', 'December'];
             return months[month];
         }
 
-        // Get short month name
         function getShortMonthName(month) {
-            const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+            const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             return months[month];
         }
 
-        // Initialize year dropdown
         function initYearDropdown() {
             const yearSelect = document.getElementById('yearSelect');
             const currentYear = new Date().getFullYear();
-            
             for (let year = currentYear; year >= currentYear - 2; year--) {
                 yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
             }
         }
 
-        // Set current month checkbox
         function setCurrentMonth() {
             const currentMonth = new Date().getMonth() + 1;
             const checkbox = document.querySelector(`#monthCheckboxes input[value="${currentMonth}"]`);
@@ -325,27 +278,19 @@
             }
         }
 
-        // Setup month checkbox toggle
         function setupMonthCheckboxes() {
-            const checkboxes = document.querySelectorAll('#monthCheckboxes input[type="checkbox"]');
-            checkboxes.forEach(cb => {
+            document.querySelectorAll('#monthCheckboxes input[type="checkbox"]').forEach(cb => {
                 cb.addEventListener('change', function() {
-                    if (this.checked) {
-                        this.parentElement.classList.add('selected');
-                    } else {
-                        this.parentElement.classList.remove('selected');
-                    }
+                    this.parentElement.classList.toggle('selected', this.checked);
                 });
             });
         }
 
-        // Get selected months
         function getSelectedMonths() {
-            const checkboxes = document.querySelectorAll('#monthCheckboxes input[type="checkbox"]:checked');
-            return Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => a - b);
+            return Array.from(document.querySelectorAll('#monthCheckboxes input[type="checkbox"]:checked'))
+                .map(cb => parseInt(cb.value)).sort((a, b) => a - b);
         }
 
-        // Load departments
         async function loadDepartments() {
             try {
                 const result = await DepartmentAPI.getActive();
@@ -353,7 +298,6 @@
                     departments = result.data;
                     const select = document.getElementById('departmentFilter');
                     select.innerHTML = '<option value="">All Departments</option>';
-                    
                     departments.forEach(dept => {
                         if (session.role === 'admin' || dept.id === session.departmentId) {
                             select.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
@@ -365,7 +309,37 @@
             }
         }
 
-        // Generate report
+        // Load OT data for the selected period per laborer
+        async function loadOTData(year, selectedMonths) {
+            try {
+                const clientId = AUTH.getClientId();
+                const startDate = `${year}-${String(Math.min(...selectedMonths)).padStart(2, '0')}-01`;
+                const lastMonth = Math.max(...selectedMonths);
+                const lastDay = new Date(year, lastMonth, 0).getDate();
+                const endDate = `${year}-${String(lastMonth).padStart(2, '0')}-${lastDay}`;
+
+                const { data, error } = await supabaseClient
+                    .from('overtime_records')
+                    .select('labor_id, ot_hours, ot_amount')
+                    .eq('client_id', clientId)
+                    .gte('from_date', startDate)
+                    .lte('from_date', endDate);
+
+                otData = {};
+                if (!error && data) {
+                    data.forEach(r => {
+                        if (!otData[r.labor_id]) {
+                            otData[r.labor_id] = { hours: 0, amount: 0 };
+                        }
+                        otData[r.labor_id].hours += parseFloat(r.ot_hours);
+                        otData[r.labor_id].amount += parseFloat(r.ot_amount);
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to load OT data:', e);
+            }
+        }
+
         async function generateReport() {
             const year = parseInt(document.getElementById('yearSelect').value);
             const selectedMonths = getSelectedMonths();
@@ -379,27 +353,17 @@
 
             try {
                 SyncIndicator.show('Generating billing report...');
-
                 allMonthsData = [];
 
-                // Fetch data for each selected month
                 for (const month of selectedMonths) {
                     const result = await ReportAPI.getMonthlyBilling(year, month, departmentId, statusFilter);
-
-                    if (!result.success) {
-                        throw new Error(result.error);
-                    }
-
-                    allMonthsData.push({
-                        month,
-                        year,
-                        data: result.data,
-                        meta: result.meta
-                    });
+                    if (!result.success) throw new Error(result.error);
+                    allMonthsData.push({ month, year, data: result.data, meta: result.meta });
                 }
 
-                renderTable();
+                await loadOTData(year, selectedMonths);
 
+                renderTable();
                 SyncIndicator.hide();
                 Toast.success(`Report generated: ${selectedMonths.length} month(s), ${allMonthsData[0]?.data.length || 0} laborers`);
 
@@ -409,75 +373,8 @@
             }
         }
 
-        // Render table
-        function renderTable() {
-            const container = document.getElementById('reportContainer');
-
-            if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center p-20 text-muted">
-                        No data found for selected period
-                    </div>
-                `;
-                return;
-            }
-
-            // Calculate total days across all months
-            let allDays = [];
-            allMonthsData.forEach(monthData => {
-                const totalDays = monthData.meta.totalDays;
-                const shortMonth = getShortMonthName(monthData.month);
-                for (let day = 1; day <= totalDays; day++) {
-                    allDays.push({
-                        day,
-                        month: monthData.month,
-                        year: monthData.year,
-                        label: `${day} ${shortMonth}`
-                    });
-                }
-            });
-
-            // Build header row 1 (day groups)
-            let headerRow1 = `
-                <tr>
-                    <th rowspan="2">Sr</th>
-                    <th rowspan="2">Labor ID</th>
-                    <th rowspan="2">Iqama</th>
-                    <th rowspan="2">Name</th>
-                    <th rowspan="2">Role</th>
-                    <th rowspan="2">DOJ</th>
-            `;
-
-            allDays.forEach(d => {
-                headerRow1 += `<th colspan="4" class="day-group">${d.label}</th>`;
-            });
-
-            headerRow1 += `
-                    <th rowspan="2">Total Hrs</th>
-                    <th rowspan="2">P</th>
-                    <th rowspan="2">H</th>
-                    <th rowspan="2">A</th>
-                    <th rowspan="2">F</th>
-                    <th rowspan="2">Paid Days</th>
-                    <th rowspan="2">Salary</th>
-                </tr>
-            `;
-
-            // Build header row 2 (In/Out/Hrs/Status sub-headers)
-            let headerRow2 = '<tr>';
-            allDays.forEach(() => {
-                headerRow2 += `
-                    <th class="sub-header">In</th>
-                    <th class="sub-header">Out</th>
-                    <th class="sub-header">Hrs</th>
-                    <th class="sub-header">St</th>
-                `;
-            });
-            headerRow2 += '</tr>';
-
-            // Merge data from all months by labor ID
+        function mergeData() {
             const laborMap = new Map();
-            
             allMonthsData.forEach(monthData => {
                 monthData.data.forEach(labor => {
                     if (!laborMap.has(labor.laborId)) {
@@ -487,131 +384,163 @@
                             name: labor.name,
                             role: labor.role,
                             dateOfJoining: labor.dateOfJoining,
+                            monthlySalary: labor.monthlySalary,
                             months: {},
                             totalMinutes: 0,
                             presentCount: 0,
                             halfDayCount: 0,
                             absentCount: 0,
                             fridayCount: 0,
+                            holidayCount: 0,
                             totalPaidDays: 0,
                             calculatedSalary: 0
                         });
                     }
-                    
-                    const laborEntry = laborMap.get(labor.laborId);
-                    laborEntry.months[monthData.month] = labor.days;
-                    laborEntry.totalMinutes += labor.totalMinutes || 0;
-                    laborEntry.presentCount += labor.presentCount;
-                    laborEntry.halfDayCount += labor.halfDayCount;
-                    laborEntry.absentCount += labor.absentCount;
-                    laborEntry.fridayCount += labor.fridayCount;
-                    laborEntry.totalPaidDays += labor.totalPaidDays;
-                    laborEntry.calculatedSalary += labor.calculatedSalary;
+                    const entry = laborMap.get(labor.laborId);
+                    entry.months[monthData.month] = labor.days;
+                    entry.totalMinutes += labor.totalMinutes || 0;
+                    entry.presentCount += labor.presentCount;
+                    entry.halfDayCount += labor.halfDayCount;
+                    entry.absentCount += labor.absentCount;
+                    entry.fridayCount += labor.fridayCount;
+                    entry.holidayCount += labor.holidayCount || 0;
+                    entry.totalPaidDays += labor.totalPaidDays;
+                    entry.calculatedSalary += labor.calculatedSalary;
                 });
             });
 
-            // Convert to array and sort
-            const mergedData = Array.from(laborMap.values()).sort((a, b) => {
+            return Array.from(laborMap.values()).sort((a, b) => {
                 const aNum = parseInt(a.laborId.replace(/\D/g, '')) || 0;
                 const bNum = parseInt(b.laborId.replace(/\D/g, '')) || 0;
                 return aNum - bNum;
             });
+        }
 
-            // Build body
+        function renderTable() {
+            const container = document.getElementById('reportContainer');
+
+            if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
+                container.innerHTML = `<div class="text-center p-20 text-muted">No data found for selected period</div>`;
+                return;
+            }
+
+            let allDays = [];
+            allMonthsData.forEach(monthData => {
+                const shortMonth = getShortMonthName(monthData.month);
+                for (let day = 1; day <= monthData.meta.totalDays; day++) {
+                    allDays.push({ day, month: monthData.month, year: monthData.year, label: `${day} ${shortMonth}` });
+                }
+            });
+
+            // Header row 1
+            let headerRow1 = `<tr>
+                <th rowspan="2">Sr</th>
+                <th rowspan="2">Labor ID</th>
+                <th rowspan="2">Iqama</th>
+                <th rowspan="2">Name</th>
+                <th rowspan="2">Role</th>
+                <th rowspan="2">DOJ</th>`;
+            allDays.forEach(d => { headerRow1 += `<th colspan="4" class="day-group">${d.label}</th>`; });
+            headerRow1 += `
+                <th rowspan="2">Total Hrs</th>
+                <th rowspan="2">P</th>
+                <th rowspan="2">H</th>
+                <th rowspan="2">A</th>
+                <th rowspan="2">F</th>
+                <th rowspan="2">NH</th>
+                <th rowspan="2">Paid Days</th>
+                <th rowspan="2">Salary</th>
+                <th rowspan="2">OT Hrs</th>
+                <th rowspan="2">OT Amt</th>
+            </tr>`;
+
+            // Header row 2
+            let headerRow2 = '<tr>';
+            allDays.forEach(() => {
+                headerRow2 += `<th class="sub-header">In</th><th class="sub-header">Out</th><th class="sub-header">Hrs</th><th class="sub-header">St</th>`;
+            });
+            headerRow2 += '</tr>';
+
+            const mergedData = mergeData();
+
             let bodyHtml = '';
-            let grandTotalMinutes = 0;
-            let grandTotalPresent = 0;
-            let grandTotalHalfDay = 0;
-            let grandTotalAbsent = 0;
-            let grandTotalFridays = 0;
-            let grandTotalPaid = 0;
-            let grandTotalSalary = 0;
+            let grandTotalMinutes = 0, grandTotalPresent = 0, grandTotalHalfDay = 0;
+            let grandTotalAbsent = 0, grandTotalFridays = 0, grandTotalHolidays = 0;
+            let grandTotalPaid = 0, grandTotalSalary = 0, grandTotalOTHours = 0, grandTotalOTAmount = 0;
 
             mergedData.forEach((labor, index) => {
-                bodyHtml += `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td class="labor-id">${labor.laborId}</td>
-                        <td>${labor.iqamaNumber}</td>
-                        <td class="name-cell" title="${labor.name}">${labor.name}</td>
-                        <td class="role-cell" title="${labor.role || 'Labor'}">${labor.role || 'Labor'}</td>
-                        <td>${DateUtils.formatDate(labor.dateOfJoining)}</td>
-                `;
+                bodyHtml += `<tr>
+                    <td>${index + 1}</td>
+                    <td class="labor-id">${labor.laborId}</td>
+                    <td>${labor.iqamaNumber}</td>
+                    <td class="name-cell" title="${labor.name}">${labor.name}</td>
+                    <td class="role-cell" title="${labor.role || 'Labor'}">${labor.role || 'Labor'}</td>
+                    <td>${DateUtils.formatDate(labor.dateOfJoining)}</td>`;
 
                 allDays.forEach(d => {
                     const monthDays = labor.months[d.month] || {};
                     const dayData = monthDays[d.day] || { status: 'A', in: '', out: '', hours: '' };
                     const status = dayData.status;
-                    let statusClass = '';
-                    
-                    if (status === 'P') statusClass = 'status-P';
-                    else if (status === 'H') statusClass = 'status-H';
-                    else if (status === 'A') statusClass = 'status-A';
-                    else if (status === 'F') statusClass = 'status-F';
-
+                    const statusClass = status === 'P' ? 'status-P' : status === 'H' ? 'status-H' :
+                                       status === 'A' ? 'status-A' : status === 'F' ? 'status-F' :
+                                       status === 'NH' ? 'status-NH' : '';
                     bodyHtml += `
                         <td class="time-cell">${dayData.in || '-'}</td>
                         <td class="time-cell">${dayData.out || '-'}</td>
                         <td class="hours-cell">${dayData.hours || '-'}</td>
-                        <td class="${statusClass}">${status}</td>
-                    `;
+                        <td class="${statusClass}">${status}</td>`;
                 });
 
                 const totalHours = ReportAPI.formatMinutesToHHMM(labor.totalMinutes);
+                const ot = otData[labor.laborId] || { hours: 0, amount: 0 };
 
                 bodyHtml += `
-                        <td class="hours-total">${totalHours || '-'}</td>
-                        <td class="total-cell">${labor.presentCount}</td>
-                        <td class="total-cell">${labor.halfDayCount}</td>
-                        <td class="total-cell">${labor.absentCount}</td>
-                        <td class="total-cell">${labor.fridayCount}</td>
-                        <td class="paid-cell">${labor.totalPaidDays}</td>
-                        <td class="salary-cell">${labor.calculatedSalary.toLocaleString()}</td>
-                    </tr>
-                `;
+                    <td class="hours-total">${totalHours || '-'}</td>
+                    <td class="total-cell">${labor.presentCount}</td>
+                    <td class="total-cell">${labor.halfDayCount}</td>
+                    <td class="total-cell">${labor.absentCount}</td>
+                    <td class="total-cell">${labor.fridayCount}</td>
+                    <td class="total-cell">${labor.holidayCount || 0}</td>
+                    <td class="paid-cell">${labor.totalPaidDays}</td>
+                    <td class="salary-cell">${labor.calculatedSalary.toLocaleString()}</td>
+                    <td class="ot-hours-cell">${ot.hours > 0 ? ot.hours.toFixed(1) : '-'}</td>
+                    <td class="ot-amount-cell">${ot.amount > 0 ? ot.amount.toFixed(2) : '-'}</td>
+                </tr>`;
 
                 grandTotalMinutes += labor.totalMinutes || 0;
                 grandTotalPresent += labor.presentCount;
                 grandTotalHalfDay += labor.halfDayCount;
                 grandTotalAbsent += labor.absentCount;
                 grandTotalFridays += labor.fridayCount;
+                grandTotalHolidays += labor.holidayCount || 0;
                 grandTotalPaid += labor.totalPaidDays;
                 grandTotalSalary += labor.calculatedSalary;
+                grandTotalOTHours += ot.hours;
+                grandTotalOTAmount += ot.amount;
             });
-
-            // Format grand total hours
-            const grandTotalHours = ReportAPI.formatMinutesToHHMM(grandTotalMinutes);
 
             // Summary row
+            bodyHtml += `<tr class="summary-row"><td colspan="6"><strong>GRAND TOTAL</strong></td>`;
+            allDays.forEach(() => { bodyHtml += `<td></td><td></td><td></td><td></td>`; });
             bodyHtml += `
-                <tr class="summary-row">
-                    <td colspan="6"><strong>GRAND TOTAL</strong></td>
-            `;
+                <td>${ReportAPI.formatMinutesToHHMM(grandTotalMinutes)}</td>
+                <td>${grandTotalPresent}</td>
+                <td>${grandTotalHalfDay}</td>
+                <td>${grandTotalAbsent}</td>
+                <td>${grandTotalFridays}</td>
+                <td>${grandTotalHolidays}</td>
+                <td>${grandTotalPaid}</td>
+                <td>${grandTotalSalary.toLocaleString()}</td>
+                <td>${grandTotalOTHours > 0 ? grandTotalOTHours.toFixed(1) : '-'}</td>
+                <td>${grandTotalOTAmount > 0 ? grandTotalOTAmount.toFixed(2) : '-'}</td>
+            </tr>`;
 
-            allDays.forEach(() => {
-                bodyHtml += `<td></td><td></td><td></td><td></td>`;
-            });
-
-            bodyHtml += `
-                    <td>${grandTotalHours}</td>
-                    <td>${grandTotalPresent}</td>
-                    <td>${grandTotalHalfDay}</td>
-                    <td>${grandTotalAbsent}</td>
-                    <td>${grandTotalFridays}</td>
-                    <td>${grandTotalPaid}</td>
-                    <td>${grandTotalSalary.toLocaleString()}</td>
-                </tr>
-            `;
-
-            container.innerHTML = `
-                <table class="billing-table">
-                    <thead>${headerRow1}${headerRow2}</thead>
-                    <tbody>${bodyHtml}</tbody>
-                </table>
-            `;
+            container.innerHTML = `<table class="billing-table">
+                <thead>${headerRow1}${headerRow2}</thead>
+                <tbody>${bodyHtml}</tbody>
+            </table>`;
         }
 
-        // Export Excel (XLSX format with ExcelJS)
         async function exportExcel() {
             if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
                 Toast.error('No data to export. Generate report first.');
@@ -621,134 +550,70 @@
             try {
                 SyncIndicator.show('Generating Excel...');
 
-                // Calculate total days across all months
                 let allDays = [];
                 allMonthsData.forEach(monthData => {
-                    const totalDays = monthData.meta.totalDays;
                     const shortMonth = getShortMonthName(monthData.month);
-                    for (let day = 1; day <= totalDays; day++) {
-                        allDays.push({
-                            day,
-                            month: monthData.month,
-                            year: monthData.year,
-                            label: `${day} ${shortMonth}`
-                        });
+                    for (let day = 1; day <= monthData.meta.totalDays; day++) {
+                        allDays.push({ day, month: monthData.month, year: monthData.year, label: `${day} ${shortMonth}` });
                     }
                 });
 
                 const totalDayCols = allDays.length;
-
-                // Create workbook and worksheet
                 const workbook = new ExcelJS.Workbook();
                 const worksheet = workbook.addWorksheet('3PL Billing');
 
-                // Define colors
                 const colors = {
                     P: { bg: 'C6F6D5', font: '22543D' },
                     H: { bg: 'FEFCBF', font: '975A16' },
                     A: { bg: 'FED7D7', font: 'C53030' },
                     F: { bg: 'E2E8F0', font: '718096' },
+                    NH: { bg: 'FEF3C7', font: '92400E' },
                     header: { bg: '667EEA', font: 'FFFFFF' },
                     subHeader: { bg: '5A67D8', font: 'FFFFFF' },
                     totalCell: { bg: 'EDF2F7', font: '000000' },
                     hoursTotal: { bg: 'BEE3F8', font: '2B6CB0' },
                     paidCell: { bg: 'C6F6D5', font: '22543D' },
-                    salaryCell: { bg: 'FAF5FF', font: '6B46C1' }
+                    salaryCell: { bg: 'FAF5FF', font: '6B46C1' },
+                    otHoursCell: { bg: 'EBF4FF', font: '2B6CB0' },
+                    otAmountCell: { bg: 'E6FFFA', font: '234E52' }
                 };
 
-                // Build header row 1 (day groups)
+                // Header row 1
                 let headerRow1 = ['', '', '', '', '', ''];
-                allDays.forEach(d => {
-                    headerRow1.push(d.label, '', '', '');
-                });
-                headerRow1.push('Total Hrs', 'P', 'H', 'A', 'F', 'Paid Days', 'Salary');
+                allDays.forEach(d => { headerRow1.push(d.label, '', '', ''); });
+                headerRow1.push('Total Hrs', 'P', 'H', 'A', 'F', 'NH', 'Paid Days', 'Salary', 'OT Hrs', 'OT Amt');
 
-                // Build header row 2 (sub-headers)
+                // Header row 2
                 let headerRow2 = ['Sr', 'Labor ID', 'Iqama', 'Name', 'Role', 'DOJ'];
-                allDays.forEach(() => {
-                    headerRow2.push('In', 'Out', 'Hrs', 'St');
-                });
-                headerRow2.push('', '', '', '', '', '', '');
+                allDays.forEach(() => { headerRow2.push('In', 'Out', 'Hrs', 'St'); });
+                headerRow2.push('', '', '', '', '', '', '', '', '', '');
 
-                // Add header rows
                 const row1 = worksheet.addRow(headerRow1);
                 const row2 = worksheet.addRow(headerRow2);
 
-                // Style header row 1
-                row1.eachCell((cell, colNumber) => {
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.header.bg } };
-                    cell.font = { bold: true, color: { argb: colors.header.font } };
+                const styleHeader = (cell, bg, font) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+                    cell.font = { bold: true, color: { argb: font } };
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-                });
+                };
 
-                // Style header row 2
-                row2.eachCell((cell, colNumber) => {
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.subHeader.bg } };
-                    cell.font = { bold: true, color: { argb: colors.subHeader.font }, size: 9 };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-                });
+                row1.eachCell(cell => styleHeader(cell, colors.header.bg, colors.header.font));
+                row2.eachCell(cell => styleHeader(cell, colors.subHeader.bg, colors.subHeader.font));
 
-                // Merge header cells for day groups (4 columns each)
+                // Merge day group headers
                 for (let i = 0; i < totalDayCols; i++) {
                     const startCol = 7 + i * 4;
                     worksheet.mergeCells(1, startCol, 1, startCol + 3);
                 }
-                // Merge first 6 columns in row 1
                 worksheet.mergeCells(1, 1, 1, 6);
 
-                // Merge data from all months by labor ID
-                const laborMap = new Map();
-                
-                allMonthsData.forEach(monthData => {
-                    monthData.data.forEach(labor => {
-                        if (!laborMap.has(labor.laborId)) {
-                            laborMap.set(labor.laborId, {
-                                laborId: labor.laborId,
-                                iqamaNumber: labor.iqamaNumber,
-                                name: labor.name,
-                                role: labor.role,
-                                dateOfJoining: labor.dateOfJoining,
-                                months: {},
-                                totalMinutes: 0,
-                                presentCount: 0,
-                                halfDayCount: 0,
-                                absentCount: 0,
-                                fridayCount: 0,
-                                totalPaidDays: 0,
-                                calculatedSalary: 0
-                            });
-                        }
-                        
-                        const laborEntry = laborMap.get(labor.laborId);
-                        laborEntry.months[monthData.month] = labor.days;
-                        laborEntry.totalMinutes += labor.totalMinutes || 0;
-                        laborEntry.presentCount += labor.presentCount;
-                        laborEntry.halfDayCount += labor.halfDayCount;
-                        laborEntry.absentCount += labor.absentCount;
-                        laborEntry.fridayCount += labor.fridayCount;
-                        laborEntry.totalPaidDays += labor.totalPaidDays;
-                        laborEntry.calculatedSalary += labor.calculatedSalary;
-                    });
-                });
+                const mergedData = mergeData();
 
-                // Convert to array and sort
-                const mergedData = Array.from(laborMap.values()).sort((a, b) => {
-                    const aNum = parseInt(a.laborId.replace(/\D/g, '')) || 0;
-                    const bNum = parseInt(b.laborId.replace(/\D/g, '')) || 0;
-                    return aNum - bNum;
-                });
-
-                // Add data rows
                 mergedData.forEach((labor, index) => {
                     let rowData = [
-                        index + 1,
-                        labor.laborId,
-                        labor.iqamaNumber,
-                        labor.name,
-                        labor.role || 'Labor',
-                        DateUtils.formatDate(labor.dateOfJoining)
+                        index + 1, labor.laborId, labor.iqamaNumber,
+                        labor.name, labor.role || 'Labor', DateUtils.formatDate(labor.dateOfJoining)
                     ];
 
                     allDays.forEach(d => {
@@ -758,34 +623,29 @@
                     });
 
                     const totalHours = ReportAPI.formatMinutesToHHMM(labor.totalMinutes);
+                    const ot = otData[labor.laborId] || { hours: 0, amount: 0 };
 
                     rowData.push(
                         totalHours || '',
-                        labor.presentCount,
-                        labor.halfDayCount,
-                        labor.absentCount,
-                        labor.fridayCount,
-                        labor.totalPaidDays,
-                        labor.calculatedSalary
+                        labor.presentCount, labor.halfDayCount, labor.absentCount,
+                        labor.fridayCount, labor.holidayCount || 0,
+                        labor.totalPaidDays, labor.calculatedSalary,
+                        ot.hours > 0 ? ot.hours : '',
+                        ot.amount > 0 ? parseFloat(ot.amount.toFixed(2)) : ''
                     );
 
                     const dataRow = worksheet.addRow(rowData);
 
-                    // Style data cells
                     dataRow.eachCell((cell, colNumber) => {
                         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
                         cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-                        // Iqama column (3) - format as text
-                        if (colNumber === 3) {
-                            cell.numFmt = '@';
-                        }
+                        if (colNumber === 3) cell.numFmt = '@';
 
-                        // Day columns - 4 per day (In, Out, Hrs, Status)
+                        // Status columns
                         if (colNumber > 6 && colNumber <= 6 + totalDayCols * 4) {
                             const colInDay = (colNumber - 7) % 4;
                             if (colInDay === 3) {
-                                // Status column
                                 const status = cell.value;
                                 if (colors[status]) {
                                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors[status].bg } };
@@ -794,74 +654,70 @@
                             }
                         }
 
-                        // Summary columns (last 7)
                         const summaryStart = 7 + totalDayCols * 4;
-                        
-                        // Total Hours
-                        if (colNumber === summaryStart) {
+                        if (colNumber === summaryStart) { // Total Hrs
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.hoursTotal.bg } };
                             cell.font = { bold: true, color: { argb: colors.hoursTotal.font } };
                         }
-                        
-                        // P, H, A, F columns
-                        if (colNumber >= summaryStart + 1 && colNumber <= summaryStart + 4) {
+                        if (colNumber >= summaryStart + 1 && colNumber <= summaryStart + 5) { // P H A F NH
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.totalCell.bg } };
                             cell.font = { bold: true };
                         }
-
-                        // Paid Days column
-                        if (colNumber === summaryStart + 5) {
+                        if (colNumber === summaryStart + 6) { // Paid Days
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.paidCell.bg } };
                             cell.font = { bold: true, color: { argb: colors.paidCell.font } };
                         }
-
-                        // Salary column
-                        if (colNumber === summaryStart + 6) {
+                        if (colNumber === summaryStart + 7) { // Salary
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.salaryCell.bg } };
                             cell.font = { bold: true, color: { argb: colors.salaryCell.font } };
+                        }
+                        if (colNumber === summaryStart + 8) { // OT Hours
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.otHoursCell.bg } };
+                            cell.font = { bold: true, color: { argb: colors.otHoursCell.font } };
+                        }
+                        if (colNumber === summaryStart + 9) { // OT Amount
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.otAmountCell.bg } };
+                            cell.font = { bold: true, color: { argb: colors.otAmountCell.font } };
                         }
                     });
                 });
 
-                // Set column widths
-                worksheet.getColumn(1).width = 4;   // Sr
-                worksheet.getColumn(2).width = 8;   // Labor ID
-                worksheet.getColumn(3).width = 12;  // Iqama
-                worksheet.getColumn(4).width = 15;  // Name
-                worksheet.getColumn(5).width = 10;  // Role
-                worksheet.getColumn(6).width = 10;  // DOJ
+                // Column widths
+                worksheet.getColumn(1).width = 4;
+                worksheet.getColumn(2).width = 8;
+                worksheet.getColumn(3).width = 12;
+                worksheet.getColumn(4).width = 15;
+                worksheet.getColumn(5).width = 10;
+                worksheet.getColumn(6).width = 10;
 
                 for (let i = 0; i < totalDayCols; i++) {
                     const startCol = 7 + i * 4;
-                    worksheet.getColumn(startCol).width = 8;      // In
-                    worksheet.getColumn(startCol + 1).width = 8;  // Out
-                    worksheet.getColumn(startCol + 2).width = 6;  // Hrs
-                    worksheet.getColumn(startCol + 3).width = 4;  // Status
+                    worksheet.getColumn(startCol).width = 8;
+                    worksheet.getColumn(startCol + 1).width = 8;
+                    worksheet.getColumn(startCol + 2).width = 6;
+                    worksheet.getColumn(startCol + 3).width = 4;
                 }
 
                 const summaryStart = 7 + totalDayCols * 4;
-                worksheet.getColumn(summaryStart).width = 9;      // Total Hrs
-                worksheet.getColumn(summaryStart + 1).width = 5;  // P
-                worksheet.getColumn(summaryStart + 2).width = 5;  // H
-                worksheet.getColumn(summaryStart + 3).width = 5;  // A
-                worksheet.getColumn(summaryStart + 4).width = 5;  // F
-                worksheet.getColumn(summaryStart + 5).width = 9;  // Paid Days
-                worksheet.getColumn(summaryStart + 6).width = 10; // Salary
+                worksheet.getColumn(summaryStart).width = 9;
+                worksheet.getColumn(summaryStart + 1).width = 5;
+                worksheet.getColumn(summaryStart + 2).width = 5;
+                worksheet.getColumn(summaryStart + 3).width = 5;
+                worksheet.getColumn(summaryStart + 4).width = 5;
+                worksheet.getColumn(summaryStart + 5).width = 5;
+                worksheet.getColumn(summaryStart + 6).width = 9;
+                worksheet.getColumn(summaryStart + 7).width = 10;
+                worksheet.getColumn(summaryStart + 8).width = 8;
+                worksheet.getColumn(summaryStart + 9).width = 10;
 
-                // Freeze first 2 rows and first 6 columns
                 worksheet.views = [{ state: 'frozen', xSplit: 6, ySplit: 2 }];
 
-                // Generate filename with month range
                 const selectedMonths = getSelectedMonths();
                 const year = document.getElementById('yearSelect').value;
-                let filename;
-                if (selectedMonths.length === 1) {
-                    filename = `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}.xlsx`;
-                } else {
-                    filename = `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}-${String(selectedMonths[selectedMonths.length - 1]).padStart(2, '0')}.xlsx`;
-                }
+                const filename = selectedMonths.length === 1
+                    ? `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}.xlsx`
+                    : `3PL_Billing_${year}_${String(selectedMonths[0]).padStart(2, '0')}-${String(selectedMonths[selectedMonths.length - 1]).padStart(2, '0')}.xlsx`;
 
-                // Generate file
                 const buffer = await workbook.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                 const url = URL.createObjectURL(blob);
@@ -881,7 +737,6 @@
             }
         }
 
-        // Print report
         function printReport() {
             if (allMonthsData.length === 0 || allMonthsData[0].data.length === 0) {
                 Toast.error('No data to print. Generate report first.');
@@ -890,55 +745,44 @@
 
             const selectedMonths = getSelectedMonths();
             const year = document.getElementById('yearSelect').value;
-            let title;
-            if (selectedMonths.length === 1) {
-                title = `${getMonthName(selectedMonths[0])} ${year}`;
-            } else {
-                title = `${getMonthName(selectedMonths[0])} - ${getMonthName(selectedMonths[selectedMonths.length - 1])} ${year}`;
-            }
+            const title = selectedMonths.length === 1
+                ? `${getMonthName(selectedMonths[0])} ${year}`
+                : `${getMonthName(selectedMonths[0])} - ${getMonthName(selectedMonths[selectedMonths.length - 1])} ${year}`;
 
             const printContent = document.getElementById('reportContainer').innerHTML;
             const printWindow = window.open('', '_blank');
-            
             printWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>3PL Billing Report</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; font-size: 7px; }
-                        table { border-collapse: collapse; width: 100%; }
-                        th, td { border: 1px solid #333; padding: 2px; text-align: center; }
-                        th { background: #667eea; color: white; font-size: 6px; }
-                        .sub-header { background: #5a67d8; }
-                        .status-P { background: #c6f6d5; }
-                        .status-H { background: #fefcbf; }
-                        .status-A { background: #fed7d7; }
-                        .status-F { background: #e2e8f0; }
-                        .total-cell { background: #edf2f7; font-weight: bold; }
-                        .hours-total { background: #bee3f8; font-weight: bold; }
-                        .paid-cell { background: #c6f6d5; font-weight: bold; }
-                        .salary-cell { background: #faf5ff; font-weight: bold; }
-                        .summary-row td { background: #667eea !important; color: white !important; }
-                        .labor-id, .name-cell, .role-cell { text-align: left; }
-                        .time-cell, .hours-cell { font-size: 6px; }
-                        @media print {
-                            @page { size: landscape; margin: 0.2cm; }
-                        }
-                    </style>
-                </head>
-                <body>
-                    <h2 style="text-align: center; font-size: 11px;">3PL Monthly Billing Report - ${title}</h2>
-                    ${printContent}
-                </body>
-                </html>
+                <!DOCTYPE html><html><head>
+                <title>3PL Billing Report</title>
+                <style>
+                    body { font-family: Arial, sans-serif; font-size: 7px; }
+                    table { border-collapse: collapse; width: 100%; }
+                    th, td { border: 1px solid #333; padding: 2px; text-align: center; }
+                    th { background: #667eea; color: white; font-size: 6px; }
+                    .sub-header { background: #5a67d8; }
+                    .status-P { background: #c6f6d5; }
+                    .status-H { background: #fefcbf; }
+                    .status-A { background: #fed7d7; }
+                    .status-F { background: #e2e8f0; }
+                    .status-NH { background: #fef3c7; }
+                    .total-cell { background: #edf2f7; font-weight: bold; }
+                    .hours-total { background: #bee3f8; font-weight: bold; }
+                    .paid-cell { background: #c6f6d5; font-weight: bold; }
+                    .salary-cell { background: #faf5ff; font-weight: bold; }
+                    .ot-hours-cell { background: #ebf4ff; font-weight: bold; }
+                    .ot-amount-cell { background: #e6fffa; font-weight: bold; }
+                    .summary-row td { background: #667eea !important; color: white !important; }
+                    .labor-id, .name-cell, .role-cell { text-align: left; }
+                    @media print { @page { size: landscape; margin: 0.2cm; } }
+                </style></head><body>
+                <h2 style="text-align:center;font-size:11px;">3PL Monthly Billing Report - ${title}</h2>
+                ${printContent}
+                </body></html>
             `);
-            
             printWindow.document.close();
             printWindow.print();
         }
 
-        // Initialize
         initYearDropdown();
         setCurrentMonth();
         setupMonthCheckboxes();
