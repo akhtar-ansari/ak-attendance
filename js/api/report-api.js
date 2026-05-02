@@ -1,4 +1,4 @@
-// AK Attendance - Report API v5 (with Punch Location)
+// AK Attendance - Report API v6 (Friday cross-month fix + LOP H→P fix + salary fix)
 const ReportAPI = {
     // Get daily attendance summary (original - only punched laborers)
     async getDailyAttendance(fromDate, toDate, departmentId = null) {
@@ -28,7 +28,6 @@ const ReportAPI = {
             }
 
             const { data, error } = await query;
-
             if (error) throw error;
             return { success: true, data: data || [] };
         } catch (error) {
@@ -43,7 +42,6 @@ const ReportAPI = {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
             const clientId = AUTH.getClientId();
 
-            // 1. Get all active laborers
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, name, iqama_number, department_id, date_of_joining, status, role')
@@ -57,7 +55,6 @@ const ReportAPI = {
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
 
-            // 2. Get all attendance records for date range
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('*')
@@ -72,7 +69,6 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
-            // 2b. Get first punch location for each labor+date
             let punchQuery = supabaseClient
                 .from('punch_records')
                 .select('labor_id, date, time, location_name')
@@ -88,7 +84,6 @@ const ReportAPI = {
             const { data: punches, error: punchError } = await punchQuery;
             if (punchError) throw punchError;
 
-            // Build first punch location map (first punch per labor+date)
             const punchLocationMap = {};
             (punches || []).forEach(p => {
                 const key = `${p.labor_id}_${p.date}`;
@@ -97,7 +92,6 @@ const ReportAPI = {
                 }
             });
 
-            // 3. Get departments for names
             const { data: departments } = await supabaseClient
                 .from('departments')
                 .select('id, name')
@@ -106,33 +100,29 @@ const ReportAPI = {
             const deptMap = {};
             (departments || []).forEach(d => deptMap[d.id] = d.name);
 
-            // 4. Build attendance map
             const attendanceMap = {};
             (attendance || []).forEach(a => {
                 const key = `${a.labor_id}_${a.date}`;
                 attendanceMap[key] = a;
             });
 
-            // 5. Generate all date + labor combinations
             const result = [];
             const startDate = new Date(fromDate);
             const endDate = new Date(toDate);
 
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 const dateStr = d.toISOString().split('T')[0];
-                const dayOfWeek = d.getDay(); // 0=Sun, 5=Fri
+                const dayOfWeek = d.getDay();
 
                 for (const labor of laborers) {
                     const key = `${labor.labor_id}_${dateStr}`;
                     const record = attendanceMap[key];
 
-                    // Skip if labor joined after this date
                     if (labor.date_of_joining && new Date(labor.date_of_joining) > d) {
                         continue;
                     }
 
                     if (record) {
-                        // Has attendance record
                         result.push({
                             ...record,
                             laborName: labor.name,
@@ -144,9 +134,8 @@ const ReportAPI = {
                             isFriday: dayOfWeek === 5
                         });
                     } else {
-                        // No attendance record - create virtual absent record
                         result.push({
-                            id: null, // No DB record
+                            id: null,
                             labor_id: labor.labor_id,
                             department_id: labor.department_id,
                             date: dateStr,
@@ -171,7 +160,6 @@ const ReportAPI = {
                 }
             }
 
-            // Sort by date desc, then labor_id
             result.sort((a, b) => {
                 if (a.date !== b.date) {
                     return new Date(b.date) - new Date(a.date);
@@ -194,7 +182,6 @@ const ReportAPI = {
             const session = AUTH.getSession();
             const clientId = AUTH.getClientId();
 
-            // Check if record already exists
             const { data: existing } = await supabaseClient
                 .from('daily_attendance')
                 .select('id')
@@ -204,7 +191,6 @@ const ReportAPI = {
                 .single();
 
             if (existing) {
-                // Record exists, just update it
                 const { error } = await supabaseClient
                     .from('daily_attendance')
                     .update({
@@ -219,7 +205,6 @@ const ReportAPI = {
                 return { success: true, recordId: existing.id };
             }
 
-            // Create new record
             const { data: newRecord, error: insertError } = await supabaseClient
                 .from('daily_attendance')
                 .insert({
@@ -254,12 +239,10 @@ const ReportAPI = {
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
             
-            // Look back 30 days max
             const thirtyDaysAgo = new Date(today);
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-            // Get attendance records for last 30 days
             const { data: attendance, error } = await supabaseClient
                 .from('daily_attendance')
                 .select('date, final_status')
@@ -271,28 +254,21 @@ const ReportAPI = {
 
             if (error) throw error;
 
-            // Build date map
             const attendanceMap = {};
             (attendance || []).forEach(a => {
                 attendanceMap[a.date] = a.final_status;
             });
 
-            // Count consecutive absent days from today backwards
             let streak = 0;
             for (let d = new Date(today); d >= thirtyDaysAgo; d.setDate(d.getDate() - 1)) {
                 const dateStr = d.toISOString().split('T')[0];
                 const dayOfWeek = d.getDay();
-                
-                // Skip Fridays
                 if (dayOfWeek === 5) continue;
 
                 const status = attendanceMap[dateStr];
-                
-                // If no record or status is A, count as absent
                 if (!status || status === 'A') {
                     streak++;
                 } else {
-                    // Found a non-absent day, stop counting
                     break;
                 }
             }
@@ -312,12 +288,10 @@ const ReportAPI = {
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
             
-            // Look back 30 days
             const thirtyDaysAgo = new Date(today);
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-            // Get all active laborers
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, date_of_joining')
@@ -331,7 +305,6 @@ const ReportAPI = {
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
 
-            // Get all attendance for last 30 days
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status')
@@ -346,7 +319,6 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
-            // Build attendance map by labor
             const attendanceByLabor = {};
             (attendance || []).forEach(a => {
                 if (!attendanceByLabor[a.labor_id]) {
@@ -355,7 +327,6 @@ const ReportAPI = {
                 attendanceByLabor[a.labor_id][a.date] = a.final_status;
             });
 
-            // Calculate streak for each labor
             const streaks = {};
             for (const labor of laborers) {
                 const laborAttendance = attendanceByLabor[labor.labor_id] || {};
@@ -365,15 +336,10 @@ const ReportAPI = {
                 for (let d = new Date(today); d >= thirtyDaysAgo; d.setDate(d.getDate() - 1)) {
                     const dateStr = d.toISOString().split('T')[0];
                     const dayOfWeek = d.getDay();
-                    
-                    // Skip Fridays
                     if (dayOfWeek === 5) continue;
-
-                    // Skip dates before DOJ
                     if (doj && d < doj) break;
 
                     const status = laborAttendance[dateStr];
-                    
                     if (!status || status === 'A') {
                         streak++;
                     } else {
@@ -481,17 +447,11 @@ const ReportAPI = {
     // Determine status based on worked hours and min hours
     determineStatus(workedMinutes, minHoursFullDay) {
         if (!workedMinutes || workedMinutes <= 0) return 'A';
-        
         const fullDayMinutes = this.parseTimeToMinutes(minHoursFullDay || '09:30');
         const halfDayMinutes = fullDayMinutes / 2;
-
-        if (workedMinutes >= fullDayMinutes) {
-            return 'P';
-        } else if (workedMinutes >= halfDayMinutes) {
-            return 'H';
-        } else {
-            return 'A';
-        }
+        if (workedMinutes >= fullDayMinutes) return 'P';
+        else if (workedMinutes >= halfDayMinutes) return 'H';
+        else return 'A';
     },
 
     // Get monthly summary for 3PL billing
@@ -499,12 +459,10 @@ const ReportAPI = {
         try {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
             
-            // Calculate date range
             const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
             const lastDay = new Date(year, month, 0).getDate();
             const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
-            // Get departments with min_hours_full_day
             const { data: deptData, error: deptError } = await supabaseClient
                 .from('departments')
                 .select('id, min_hours_full_day')
@@ -512,13 +470,11 @@ const ReportAPI = {
             
             if (deptError) throw deptError;
 
-            // Build department min hours map
             const deptMinHoursMap = {};
             (deptData || []).forEach(d => {
                 deptMinHoursMap[d.id] = d.min_hours_full_day || '09:30';
             });
 
-            // Get laborers based on status filter
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('labor_id, iqama_number, name, date_of_joining, department_id, status, last_working_date, role, monthly_salary')
@@ -528,27 +484,21 @@ const ReportAPI = {
                 laborQuery = laborQuery.eq('department_id', departmentFilter);
             }
 
-            // Apply status filter logic
             if (statusFilter === 'active') {
-                // Active laborers OR laborers who became inactive during/after this month
                 laborQuery = laborQuery.or(`status.eq.active,and(status.eq.inactive,last_working_date.gte.${startDate})`);
             } else if (statusFilter === 'inactive') {
-                // Inactive laborers whose last_working_date is before this month
                 laborQuery = laborQuery.eq('status', 'inactive').lt('last_working_date', startDate);
             }
-            // If statusFilter is empty/all, no additional filter
 
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
 
-            // Natural sort by labor_id (L1, L2, L3... not L1, L10, L11)
             laborers.sort((a, b) => {
                 const aNum = parseInt(a.labor_id.replace(/\D/g, '')) || 0;
                 const bNum = parseInt(b.labor_id.replace(/\D/g, '')) || 0;
                 return aNum - bNum;
             });
 
-            // Get all attendance records for the month
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status, first_login, last_logout')
@@ -563,7 +513,7 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
-            // Get holidays for this month
+            // Get holidays (active only)
             const { data: holidaysData } = await supabaseClient
                 .from('holidays')
                 .select('date, name')
@@ -572,13 +522,11 @@ const ReportAPI = {
                 .gte('date', startDate)
                 .lte('date', endDate);
 
-            // Build holiday map: key = date string, value = holiday name
             const holidayMap = {};
             (holidaysData || []).forEach(h => {
                 holidayMap[h.date] = h.name;
             });
 
-            // Build attendance map with in/out times
             const attendanceMap = {};
             (attendance || []).forEach(a => {
                 const key = `${a.labor_id}_${a.date}`;
@@ -589,7 +537,6 @@ const ReportAPI = {
                 };
             });
 
-            // Build report data
             const reportData = laborers.map(laborer => {
                 const doj = new Date(laborer.date_of_joining);
                 const lastWorkingDate = laborer.last_working_date ? new Date(laborer.last_working_date) : null;
@@ -620,22 +567,20 @@ const ReportAPI = {
                     let hours = '';
 
                     if (isBeforeDOJ || isAfterLWD) {
-                        // Before joining or after last working date = Absent
                         status = 'A';
                         absentCount++;
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
+
                     } else if (holidayMap[dateStr]) {
-                        // National Holiday - sandwich rule: prev working day absent + next working day absent = NH absent
-                        // Find previous working day (skip Friday)
+                        // National Holiday sandwich rule
                         let prevDay = day - 1;
                         while (prevDay >= 1) {
                             const prevDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`);
                             if (prevDate.getDay() !== 5) break;
                             prevDay--;
                         }
-                        // Find next working day (skip Friday)
                         let nextDay = day + 1;
                         while (nextDay <= lastDay) {
                             const nextDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`);
@@ -650,7 +595,6 @@ const ReportAPI = {
                             ? `${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`
                             : null;
 
-                        // Get prev day status
                         let prevStatus = 'A';
                         if (prevDateStr) {
                             const prevKey = `${laborer.labor_id}_${prevDateStr}`;
@@ -663,7 +607,6 @@ const ReportAPI = {
                             }
                         }
 
-                        // Get next day status
                         let nextStatus = 'A';
                         if (nextDateStr) {
                             const nextKey = `${laborer.labor_id}_${nextDateStr}`;
@@ -683,20 +626,21 @@ const ReportAPI = {
                             status = 'NH';
                             holidayCount++;
                         }
-                        // Clear in/out for holiday
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
 
                     } else if (isFriday) {
-                        // Sandwich rule: Thu Absent + Sat Absent = Fri Absent
-                        const thursdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day - 1).padStart(2, '0')}`;
-                        const saturdayStr = `${year}-${String(month).padStart(2, '0')}-${String(day + 1).padStart(2, '0')}`;
-                        
+                        // FIX 1: Friday sandwich rule — cross-month boundary aware
+                        // Use JS Date arithmetic so day-1 and day+1 correctly roll into prev/next month
+                        const thuDate = new Date(year, month - 1, day - 1);
+                        const satDate = new Date(year, month - 1, day + 1);
+                        const thursdayStr = thuDate.toISOString().split('T')[0];
+                        const saturdayStr = satDate.toISOString().split('T')[0];
+
                         const thursdayKey = `${laborer.labor_id}_${thursdayStr}`;
                         const saturdayKey = `${laborer.labor_id}_${saturdayStr}`;
-                        
-                        // Get Thursday status
+
                         let thursdayStatus = 'A';
                         const thursdayRecord = attendanceMap[thursdayKey];
                         if (thursdayRecord && thursdayRecord.firstIn && thursdayRecord.lastOut) {
@@ -706,16 +650,13 @@ const ReportAPI = {
                             thursdayStatus = thursdayRecord.status;
                         }
 
-                        // Get Saturday status
                         let saturdayStatus = 'A';
-                        if (day + 1 <= lastDay) {
-                            const saturdayRecord = attendanceMap[saturdayKey];
-                            if (saturdayRecord && saturdayRecord.firstIn && saturdayRecord.lastOut) {
-                                const satMinutes = this.calculateHours(saturdayRecord.firstIn, saturdayRecord.lastOut);
-                                saturdayStatus = this.determineStatus(satMinutes, minHours);
-                            } else if (saturdayRecord && saturdayRecord.status) {
-                                saturdayStatus = saturdayRecord.status;
-                            }
+                        const saturdayRecord = attendanceMap[saturdayKey];
+                        if (saturdayRecord && saturdayRecord.firstIn && saturdayRecord.lastOut) {
+                            const satMinutes = this.calculateHours(saturdayRecord.firstIn, saturdayRecord.lastOut);
+                            saturdayStatus = this.determineStatus(satMinutes, minHours);
+                        } else if (saturdayRecord && saturdayRecord.status) {
+                            saturdayStatus = saturdayRecord.status;
                         }
 
                         if (thursdayStatus === 'A' && saturdayStatus === 'A') {
@@ -725,27 +666,31 @@ const ReportAPI = {
                             status = 'F';
                             fridayCount++;
                         }
-                        // Clear in/out for Friday
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
+
                     } else if (workedMinutes > 0) {
-                        // Calculate status based on worked hours
-                        status = this.determineStatus(workedMinutes, minHours);
+                        // FIX 2: Respect final_status if admin approved LOP (H→P)
+                        if (record && record.status === 'P') {
+                            status = 'P';
+                            presentCount++;
+                        } else {
+                            status = this.determineStatus(workedMinutes, minHours);
+                            if (status === 'P') presentCount++;
+                            else if (status === 'H') halfDayCount++;
+                            else absentCount++;
+                        }
                         hours = this.formatMinutesToHHMM(workedMinutes);
                         totalMinutes += workedMinutes;
 
-                        if (status === 'P') presentCount++;
-                        else if (status === 'H') halfDayCount++;
-                        else absentCount++;
                     } else if (record && record.status) {
-                        // Has record but no punch times (LOP approved)
+                        // Has record but no punch times (LOP approved absent)
                         status = record.status;
                         if (status === 'P') presentCount++;
                         else if (status === 'H') halfDayCount++;
                         else absentCount++;
                     } else {
-                        // No punch = Absent
                         status = 'A';
                         absentCount++;
                     }
@@ -758,10 +703,10 @@ const ReportAPI = {
                     };
                 }
 
-                // Calculate total paid days: P*1 + F*1 + NH*1 + H*0.5
+                // P*1 + F*1 + NH*1 + H*0.5
                 const totalPaidDays = presentCount + fridayCount + holidayCount + (halfDayCount * 0.5);
 
-                // Calculate salary: (totalPaidDays / 30) * monthlySalary
+                // FIX 3: Salary based on actual days in month (28/29/30/31)
                 const calculatedSalary = Math.round((totalPaidDays / lastDay) * monthlySalary);
 
                 return {
@@ -788,13 +733,7 @@ const ReportAPI = {
             return { 
                 success: true, 
                 data: reportData,
-                meta: {
-                    year,
-                    month,
-                    totalDays: lastDay,
-                    startDate,
-                    endDate
-                }
+                meta: { year, month, totalDays: lastDay, startDate, endDate }
             };
         } catch (error) {
             console.error('Get monthly billing error:', error);
@@ -808,7 +747,6 @@ const ReportAPI = {
             const departmentFilter = departmentId || AUTH.getDepartmentFilter();
             const today = DateUtils.today();
 
-            // Get laborer counts
             let laborQuery = supabaseClient
                 .from('laborers')
                 .select('status, face_enrolled', { count: 'exact' })
@@ -824,7 +762,6 @@ const ReportAPI = {
             const activeLaborers = laborers?.filter(l => l.status === 'active').length || 0;
             const faceEnrolled = laborers?.filter(l => l.face_enrolled).length || 0;
 
-            // Get today's attendance
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('final_status')
@@ -841,7 +778,6 @@ const ReportAPI = {
             const todayHalfDay = todayAttendance?.filter(a => a.final_status === 'H').length || 0;
             const todayAbsent = todayAttendance?.filter(a => a.final_status === 'A').length || 0;
 
-            // Get today's punches
             let punchQuery = supabaseClient
                 .from('punch_records')
                 .select('type')
@@ -857,7 +793,6 @@ const ReportAPI = {
             const todayLogins = todayPunches?.filter(p => p.type === 'login').length || 0;
             const todayLogouts = todayPunches?.filter(p => p.type === 'logout').length || 0;
 
-            // Get pending LOP count from daily_attendance (H or A without approved_by)
             let lopQuery = supabaseClient
                 .from('daily_attendance')
                 .select('id', { count: 'exact', head: true })
@@ -895,7 +830,6 @@ const ReportAPI = {
     // Approve LOP (single) - works for both existing and new records
     async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null) {
         try {
-            // If no attendanceId, create new record
             if (!attendanceId && laborId && date && departmentId) {
                 return await this.createAbsentAndApprove(laborId, date, departmentId, reason);
             }
@@ -979,86 +913,83 @@ const ReportAPI = {
     isDateApprovable(dateStr) {
         const date = new Date(dateStr);
         const now = new Date();
-        
-        // Get 1st of next month after the date
         const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-        
         return now < nextMonth;
     },
 
     // Check if a date is frozen
-async isDateFrozen(date) {
-    try {
-        const clientId = AUTH.getClientId();
-        
-        const { data, error } = await supabaseClient
-            .from('attendance_freeze')
-            .select('id')
-            .eq('client_id', clientId)
-            .eq('date', date)
-            .single();
+    async isDateFrozen(date) {
+        try {
+            const clientId = AUTH.getClientId();
+            
+            const { data, error } = await supabaseClient
+                .from('attendance_freeze')
+                .select('id')
+                .eq('client_id', clientId)
+                .eq('date', date)
+                .single();
 
-        if (error && error.code !== 'PGRST116') {
-            throw error;
-        }
-
-        return { success: true, frozen: !!data };
-    } catch (error) {
-        console.error('Check freeze error:', error);
-        return { success: false, frozen: false };
-    }
-},
-
-// Freeze a date (admin only)
-async freezeDate(date) {
-    try {
-        if (!AUTH.hasRole('admin')) {
-            return { success: false, error: 'Only admin can freeze attendance' };
-        }
-
-        const clientId = AUTH.getClientId();
-        const session = AUTH.getSession();
-
-        const { error } = await supabaseClient
-            .from('attendance_freeze')
-            .insert({
-                client_id: clientId,
-                date: date,
-                frozen_by: session.name
-            });
-
-        if (error) {
-            if (error.code === '23505') {
-                return { success: false, error: 'This date is already frozen' };
+            if (error && error.code !== 'PGRST116') {
+                throw error;
             }
-            throw error;
+
+            return { success: true, frozen: !!data };
+        } catch (error) {
+            console.error('Check freeze error:', error);
+            return { success: false, frozen: false };
         }
+    },
 
-        return { success: true };
-    } catch (error) {
-        console.error('Freeze date error:', error);
-        return { success: false, error: error.message };
+    // Freeze a date (admin only)
+    async freezeDate(date) {
+        try {
+            if (!AUTH.hasRole('admin')) {
+                return { success: false, error: 'Only admin can freeze attendance' };
+            }
+
+            const clientId = AUTH.getClientId();
+            const session = AUTH.getSession();
+
+            const { error } = await supabaseClient
+                .from('attendance_freeze')
+                .insert({
+                    client_id: clientId,
+                    date: date,
+                    frozen_by: session.name
+                });
+
+            if (error) {
+                if (error.code === '23505') {
+                    return { success: false, error: 'This date is already frozen' };
+                }
+                throw error;
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Freeze date error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Get frozen dates for a range
+    async getFrozenDates(fromDate, toDate) {
+        try {
+            const clientId = AUTH.getClientId();
+
+            const { data, error } = await supabaseClient
+                .from('attendance_freeze')
+                .select('date, frozen_by, frozen_at')
+                .eq('client_id', clientId)
+                .gte('date', fromDate)
+                .lte('date', toDate);
+
+            if (error) throw error;
+
+            return { success: true, data: data || [] };
+        } catch (error) {
+            console.error('Get frozen dates error:', error);
+            return { success: false, data: [] };
+        }
     }
-},
-
-// Get frozen dates for a range
-async getFrozenDates(fromDate, toDate) {
-    try {
-        const clientId = AUTH.getClientId();
-
-        const { data, error } = await supabaseClient
-            .from('attendance_freeze')
-            .select('date, frozen_by, frozen_at')
-            .eq('client_id', clientId)
-            .gte('date', fromDate)
-            .lte('date', toDate);
-
-        if (error) throw error;
-
-        return { success: true, data: data || [] };
-    } catch (error) {
-        console.error('Get frozen dates error:', error);
-        return { success: false, data: [] };
-    }
-}
 };
