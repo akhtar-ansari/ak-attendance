@@ -499,12 +499,19 @@ const ReportAPI = {
                 return aNum - bNum;
             });
 
+            // Fetch 1 day before and after to handle boundary Fridays
+            // (e.g. Friday = 1st of month needs Thursday from previous month)
+            const prevDay = new Date(year, month - 1, 0); // last day of prev month
+            const nextDay = new Date(year, month, 1);      // first day of next month
+            const fetchFrom = prevDay.toISOString().split('T')[0];
+            const fetchTo = nextDay.toISOString().split('T')[0];
+
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('labor_id, date, final_status, first_login, last_logout')
                 .eq('client_id', AUTH.getClientId())
-                .gte('date', startDate)
-                .lte('date', endDate);
+                .gte('date', fetchFrom)
+                .lte('date', fetchTo);
 
             if (departmentFilter) {
                 attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
