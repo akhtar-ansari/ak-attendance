@@ -44,6 +44,8 @@
             width: 100%;
             padding: 15px;
             font-size: 16px;
+            display: flex;
+            justify-content: center;
         }
         .error-message {
             background: #fed7d7;
@@ -62,6 +64,27 @@
             margin-top: 20px;
             color: #999;
             font-size: 12px;
+        }
+        .password-wrapper {
+            position: relative;
+        }
+        .password-wrapper input {
+            padding-right: 45px;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            color: #666;
+            padding: 0;
+        }
+        .password-toggle:hover {
+            color: #333;
         }
     </style>
 </head>
@@ -89,7 +112,10 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" id="password" class="form-control" required placeholder="Enter password">
+                <div class="password-wrapper">
+                    <input type="password" id="password" class="form-control" required placeholder="Enter password">
+                    <button type="button" class="password-toggle" onclick="togglePassword()">👁️</button>
+                </div>
             </div>
             <button type="submit" class="btn btn-primary" id="loginBtn">
                 Login
@@ -113,52 +139,65 @@
             window.location.href = 'dashboard.html';
         }
 
+        // Toggle password visibility
+        function togglePassword() {
+            const input = document.getElementById('password');
+            const btn = input.nextElementSibling;
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁️';
+            }
+        }
+
         async function handleLogin(event) {
-    event.preventDefault();
-    const clientCode = document.getElementById('clientCode').value.trim();
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
-    const loginBtn = document.getElementById('loginBtn');
-    const errorMsg = document.getElementById('errorMsg');
-    
-    // Validate client code
-    if (!clientCode) {
-        errorMsg.textContent = '❌ Please enter client code';
-        errorMsg.classList.add('active');
-        return;
-    }
-    
-    // Clear previous error
-    errorMsg.classList.remove('active');
-    
-    // Disable button
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Logging in...';
-    
-    try {
-        // Test connection first
-        const connected = await testConnection();
-        if (!connected) {
-            throw new Error('Cannot connect to server. Check internet connection.');
+            event.preventDefault();
+            const clientCode = document.getElementById('clientCode').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+            
+            // Validate client code
+            if (!clientCode) {
+                errorMsg.textContent = '❌ Please enter client code';
+                errorMsg.classList.add('active');
+                return;
+            }
+            
+            // Clear previous error
+            errorMsg.classList.remove('active');
+            
+            // Disable button
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            
+            try {
+                // Test connection first
+                const connected = await testConnection();
+                if (!connected) {
+                    throw new Error('Cannot connect to server. Check internet connection.');
+                }
+                
+                // Attempt login with client code
+                const result = await AUTH.login(clientCode, username, password);
+                
+                if (result.success) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    errorMsg.textContent = '❌ ' + result.error;
+                    errorMsg.classList.add('active');
+                }
+            } catch (error) {
+                errorMsg.textContent = '❌ ' + error.message;
+                errorMsg.classList.add('active');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
         }
-        
-        // Attempt login with client code
-        const result = await AUTH.login(clientCode, username, password);
-        
-        if (result.success) {
-            window.location.href = 'dashboard.html';
-        } else {
-            errorMsg.textContent = '❌ ' + result.error;
-            errorMsg.classList.add('active');
-        }
-    } catch (error) {
-        errorMsg.textContent = '❌ ' + error.message;
-        errorMsg.classList.add('active');
-    } finally {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Login';
-    }
-}
 
         // Enter key submits form
         document.getElementById('password').addEventListener('keypress', function(e) {
