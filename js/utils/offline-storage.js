@@ -48,6 +48,7 @@ const OfflineStorage = {
 
     // Save offline punch
     async savePunch(punch) {
+        if (!this.db) return null;
         const tx = this.db.transaction('offlinePunches', 'readwrite');
         const store = tx.objectStore('offlinePunches');
         
@@ -66,6 +67,7 @@ const OfflineStorage = {
 
     // Get unsynced punches
     async getUnsyncedPunches() {
+        if (!this.db) return [];
         const tx = this.db.transaction('offlinePunches', 'readonly');
         const store = tx.objectStore('offlinePunches');
 
@@ -82,6 +84,7 @@ const OfflineStorage = {
 
     // Mark punch as synced
     async markPunchSynced(id) {
+        if (!this.db) return false;
         const tx = this.db.transaction('offlinePunches', 'readwrite');
         const store = tx.objectStore('offlinePunches');
 
@@ -105,6 +108,7 @@ const OfflineStorage = {
 
     // Delete synced punches older than 7 days
     async cleanupOldPunches() {
+        if (!this.db) return 0;
         const tx = this.db.transaction('offlinePunches', 'readwrite');
         const store = tx.objectStore('offlinePunches');
         const cutoff = new Date();
@@ -134,6 +138,7 @@ const OfflineStorage = {
 
     // Save face descriptors
     async saveFaceDescriptors(descriptors) {
+        if (!this.db) return;
         const tx = this.db.transaction('faceDescriptors', 'readwrite');
         const store = tx.objectStore('faceDescriptors');
 
@@ -157,6 +162,7 @@ const OfflineStorage = {
 
     // Get face descriptor by labor ID
     async getFaceDescriptor(laborId) {
+        if (!this.db) return null;
         const tx = this.db.transaction('faceDescriptors', 'readonly');
         const store = tx.objectStore('faceDescriptors');
 
@@ -169,6 +175,7 @@ const OfflineStorage = {
 
     // Get all face descriptors
     async getAllFaceDescriptors() {
+        if (!this.db) return [];
         const tx = this.db.transaction('faceDescriptors', 'readonly');
         const store = tx.objectStore('faceDescriptors');
 
@@ -181,6 +188,7 @@ const OfflineStorage = {
 
     // Save punch locations
     async savePunchLocations(locations) {
+        if (!this.db) return;
         const tx = this.db.transaction('punchLocations', 'readwrite');
         const store = tx.objectStore('punchLocations');
 
@@ -204,6 +212,7 @@ const OfflineStorage = {
 
     // Get all punch locations
     async getPunchLocations() {
+        if (!this.db) return [];
         const tx = this.db.transaction('punchLocations', 'readonly');
         const store = tx.objectStore('punchLocations');
 
@@ -216,6 +225,7 @@ const OfflineStorage = {
 
     // Save setting
     async saveSetting(key, value) {
+        if (!this.db) return;
         const tx = this.db.transaction('settings', 'readwrite');
         const store = tx.objectStore('settings');
 
@@ -228,6 +238,7 @@ const OfflineStorage = {
 
     // Get setting
     async getSetting(key) {
+        if (!this.db) return null;
         const tx = this.db.transaction('settings', 'readonly');
         const store = tx.objectStore('settings');
 
