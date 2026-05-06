@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance - User Management</title>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .password-wrapper { position: relative; }
+        .password-wrapper input { padding-right: 45px; }
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            color: #666;
+            padding: 0;
+        }
+        .password-toggle:hover { color: #333; }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -67,7 +84,10 @@
                 
                 <div class="form-group" id="passwordGroup">
                     <label>Password * <span id="passwordHint" class="text-muted">(min 6 characters)</span></label>
-                    <input type="password" id="password" class="form-control" placeholder="Enter password" minlength="6">
+                    <div class="password-wrapper">
+                        <input type="password" id="password" class="form-control" placeholder="Enter password" minlength="6">
+                        <button type="button" class="password-toggle" onclick="togglePassword()">👁️</button>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -364,6 +384,19 @@
             } catch (error) {
                 SyncIndicator.hide();
                 Toast.error('Failed to delete: ' + error.message);
+            }
+        }
+
+        // Toggle password visibility
+        function togglePassword() {
+            const input = document.getElementById('password');
+            const btn = document.querySelector('.password-toggle');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁️';
             }
         }
 
