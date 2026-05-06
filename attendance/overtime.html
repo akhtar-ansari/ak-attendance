@@ -366,6 +366,7 @@
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             el.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
+            if (tabName === 'history') loadHistory();
         }
 
         // ─── Init ───────────────────────────────────────────────
@@ -692,8 +693,8 @@
                         laborers:labor_id (name, role)
                     `)
                     .eq('client_id', clientId)
-                    .gte('from_date', fromDate)
-                    .lte('to_date', toDate)
+                    .lte('from_date', toDate)
+                    .gte('to_date', fromDate)
                     .order('submitted_at', { ascending: false });
 
                 if (error) throw error;
