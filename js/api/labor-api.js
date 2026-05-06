@@ -12,7 +12,8 @@ const LaborAPI = {
                     departments:department_id (id, name, code)
                 `)
                 .eq('client_id', AUTH.getClientId())
-                .order('labor_id');
+                .order('labor_id')
+                .limit(2000);
 
             if (departmentFilter) {
                 query = query.eq('department_id', departmentFilter);
@@ -21,7 +22,8 @@ const LaborAPI = {
             const { data, error } = await query;
 
             if (error) throw error;
-            return { success: true, data: data || [] };
+            if (data?.length === 2000) console.warn('Labor list hit 2000 record limit');
+            return { success: true, data: data || [], limited: data?.length === 2000 };
         } catch (error) {
             console.error('Get laborers error:', error);
             return { success: false, error: error.message };
@@ -32,7 +34,7 @@ const LaborAPI = {
     async getActive() {
         try {
             const departmentFilter = AUTH.getDepartmentFilter();
-            
+
             let query = supabaseClient
                 .from('laborers')
                 .select(`
@@ -41,7 +43,8 @@ const LaborAPI = {
                 `)
                 .eq('client_id', AUTH.getClientId())
                 .eq('status', 'active')
-                .order('labor_id');
+                .order('labor_id')
+                .limit(2000);
 
             if (departmentFilter) {
                 query = query.eq('department_id', departmentFilter);
@@ -50,7 +53,8 @@ const LaborAPI = {
             const { data, error } = await query;
 
             if (error) throw error;
-            return { success: true, data: data || [] };
+            if (data?.length === 2000) console.warn('Active labor list hit 2000 record limit');
+            return { success: true, data: data || [], limited: data?.length === 2000 };
         } catch (error) {
             console.error('Get active laborers error:', error);
             return { success: false, error: error.message };

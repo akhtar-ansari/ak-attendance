@@ -21,7 +21,8 @@ const ReportAPI = {
                 .eq('client_id', AUTH.getClientId())
                 .gte('date', fromDate)
                 .lte('date', toDate)
-                .order('date', { ascending: false });
+                .order('date', { ascending: false })
+                .limit(5000);
 
             if (departmentFilter) {
                 query = query.eq('department_id', departmentFilter);
@@ -29,7 +30,8 @@ const ReportAPI = {
 
             const { data, error } = await query;
             if (error) throw error;
-            return { success: true, data: data || [] };
+            if (data?.length === 5000) console.warn('Daily attendance hit 5000 record limit');
+            return { success: true, data: data || [], limited: data?.length === 5000 };
         } catch (error) {
             console.error('Get daily attendance error:', error);
             return { success: false, error: error.message };
@@ -46,7 +48,8 @@ const ReportAPI = {
                 .from('laborers')
                 .select('labor_id, name, iqama_number, department_id, date_of_joining, status, role')
                 .eq('client_id', clientId)
-                .eq('status', 'active');
+                .eq('status', 'active')
+                .limit(2000);
 
             if (departmentFilter) {
                 laborQuery = laborQuery.eq('department_id', departmentFilter);
@@ -54,6 +57,7 @@ const ReportAPI = {
 
             const { data: laborers, error: laborError } = await laborQuery;
             if (laborError) throw laborError;
+            if (laborers?.length === 2000) console.warn('Complete attendance laborers hit 2000 record limit');
 
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')

@@ -88,16 +88,20 @@ const CSVHandler = {
     validateRow(row, rowNum) {
         const errors = [];
 
-        if (!row.iqama_number || row.iqama_number.length < 5) {
-            errors.push('Invalid Iqama number');
+        if (!row.iqama_number || !/^\d{10}$/.test(row.iqama_number.trim())) {
+            errors.push('Iqama number must be exactly 10 digits (numbers only)');
         }
 
-        if (!row.name || row.name.length < 2) {
-            errors.push('Name is required');
+        if (!row.name || row.name.trim().length < 2) {
+            errors.push('Name is required (minimum 2 characters)');
+        } else if (row.name.trim().length > 100) {
+            errors.push('Name is too long (maximum 100 characters)');
         }
 
         if (!row.nationality) {
             errors.push('Nationality is required');
+        } else if (row.nationality.trim().length > 50) {
+            errors.push('Nationality is too long (maximum 50 characters)');
         }
 
         if (!row.date_of_joining) {
@@ -111,6 +115,10 @@ const CSVHandler = {
 
         if (!row.department_code) {
             errors.push('Department code is required');
+        }
+
+        if (row.status && !['active', 'inactive'].includes(row.status.toLowerCase())) {
+            errors.push('Status must be "active" or "inactive"');
         }
 
         return errors;
