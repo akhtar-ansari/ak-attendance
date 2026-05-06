@@ -1,21 +1,21 @@
 // AK Attendance - Service Worker
-const CACHE_NAME = 'ak-attendance-v44';
+const CACHE_NAME = 'ak-attendance-v45';
 const OFFLINE_PUNCHES_KEY = 'ak_offline_punches';
 const FACE_DESCRIPTORS_KEY = 'ak_face_descriptors';
 const PUNCH_LOCATIONS_KEY = 'ak_punch_locations';
 
 // Files to cache
 const CACHE_FILES = [
-  '/ak-attendance/punch/index.html',
-  '/ak-attendance/css/main.css',
-  '/ak-attendance/js/config/supabase.js',
-  '/ak-attendance/js/utils/date-utils.js',
-  '/ak-attendance/js/utils/photo-utils.js',
-  '/ak-attendance/js/utils/offline-storage.js',
-  '/ak-attendance/js/utils/sync-manager.js',
-  '/ak-attendance/js/api/punch-api.js',
-  '/ak-attendance/js/api/labor-api.js',
-  '/ak-attendance/manifest.json',
+  '/punch/index.html',
+  '/css/main.css',
+  '/js/config/supabase.js',
+  '/js/utils/date-utils.js',
+  '/js/utils/photo-utils.js',
+  '/js/utils/offline-storage.js',
+  '/js/utils/sync-manager.js',
+  '/js/api/punch-api.js',
+  '/js/api/labor-api.js',
+  '/manifest.json',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
   'https://justadudewhohacks.github.io/face-api.js/models/tiny_face_detector_model-weights_manifest.json',
@@ -91,7 +91,7 @@ if (event.request.url.startsWith('chrome-extension://')) {
           .catch(() => {
             // Offline fallback for HTML pages
             if (event.request.headers.get('accept').includes('text/html')) {
-              return caches.match('/ak-attendance/punch/index.html');
+              return caches.match('/punch/index.html');
             }
           });
       })

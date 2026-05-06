@@ -2,7 +2,7 @@
   "name": "AK Attendance",
   "short_name": "AK Attend",
   "description": "Biometric Attendance System",
-  "start_url": "/ak-attendance/punch/index.html",
+  "start_url": "/punch/index.html",
   "display": "standalone",
   "background_color": "#667eea",
   "theme_color": "#667eea",
