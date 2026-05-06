@@ -181,7 +181,7 @@ const ReportAPI = {
     },
 
     // Create absent record and approve LOP (for laborers who didn't punch)
-    async createAbsentAndApprove(laborId, date, departmentId, reason) {
+    async createAbsentAndApprove(laborId, date, departmentId, reason, finalStatus = 'P') {
         try {
             const session = AUTH.getSession();
             const clientId = AUTH.getClientId();
@@ -198,7 +198,7 @@ const ReportAPI = {
                 const { error } = await supabaseClient
                     .from('daily_attendance')
                     .update({
-                        final_status: 'P',
+                        final_status: finalStatus,
                         approved_by: session.name,
                         approved_at: new Date().toISOString(),
                         lop_reason: reason
@@ -219,7 +219,7 @@ const ReportAPI = {
                     last_logout: null,
                     total_hours: 0,
                     auto_status: 'A',
-                    final_status: 'P',
+                    final_status: finalStatus,
                     approved_by: session.name,
                     approved_at: new Date().toISOString(),
                     lop_reason: reason,
@@ -839,18 +839,18 @@ const ReportAPI = {
     },
 
     // Approve LOP (single) - works for both existing and new records
-    async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null) {
+    async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null, finalStatus = 'P') {
         try {
             if (!attendanceId && laborId && date && departmentId) {
-                return await this.createAbsentAndApprove(laborId, date, departmentId, reason);
+                return await this.createAbsentAndApprove(laborId, date, departmentId, reason, finalStatus);
             }
 
             const session = AUTH.getSession();
-            
+
             const { error } = await supabaseClient
                 .from('daily_attendance')
                 .update({
-                    final_status: 'P',
+                    final_status: finalStatus,
                     approved_by: session.name,
                     approved_at: new Date().toISOString(),
                     lop_reason: reason

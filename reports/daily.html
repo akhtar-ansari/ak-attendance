@@ -331,6 +331,19 @@
             </div>
             <div class="modal-body">
                 <div id="approveInfo" style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;"></div>
+                <div id="finalStatusGroup" style="margin-bottom: 15px; display: none;">
+                    <label style="font-weight: 600;">Mark Absent as <span style="color: red;">*</span></label>
+                    <div style="display: flex; gap: 25px; margin-top: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="finalStatus" value="P" checked>
+                            <span class="badge status-P" style="font-size: 14px; padding: 5px 12px;">Present (P)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="finalStatus" value="H">
+                            <span class="badge status-H" style="font-size: 14px; padding: 5px 12px;">Half Day (H)</span>
+                        </label>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>Reason / Remarks <span style="color: red;">*</span></label>
                     <textarea id="approveReason" class="form-control" rows="3" placeholder="Enter reason for LOP approval (mandatory)"></textarea>
@@ -801,13 +814,16 @@
                 ? '<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ This labor did not punch. A new attendance record will be created.</div>'
                 : '';
 
+            const isAbsent = record.auto_status === 'A';
             document.getElementById('approveModalTitle').textContent = 'Approve LOP';
             document.getElementById('approveInfo').innerHTML = `
                 <div><strong>Labor:</strong> ${record.laborName || record.labor_id} (${record.labor_id})</div>
                 <div><strong>Date:</strong> ${DateUtils.formatDate(record.date)}</div>
-                <div><strong>Status:</strong> ${record.auto_status} → P</div>
+                <div><strong>Status:</strong> ${record.auto_status} → ${isAbsent ? 'P or H (your choice below)' : 'P'}</div>
                 ${noPunchNote}
             `;
+            document.getElementById('finalStatusGroup').style.display = isAbsent ? 'block' : 'none';
+            document.querySelector('input[name="finalStatus"][value="P"]').checked = true;
             document.getElementById('approveReason').value = '';
             document.getElementById('approveModal').classList.add('active');
         }
@@ -831,12 +847,18 @@
                 ? `<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ ${noPunchCount} record(s) have no punch - new attendance records will be created.</div>`
                 : '';
 
+            const hasAbsentInBulk = [...selectedItems].some(key => {
+                const r = getRecordByKey(key);
+                return r && r.auto_status === 'A';
+            });
             document.getElementById('approveModalTitle').textContent = 'Bulk Approve LOP';
             document.getElementById('approveInfo').innerHTML = `
                 <div><strong>Selected Records:</strong> ${selectedItems.size}</div>
-                <div style="color: #718096; font-size: 13px; margin-top: 5px;">All selected Half Day / Absent records will be marked as Present</div>
+                <div style="color: #718096; font-size: 13px; margin-top: 5px;">Half Day records → Present. Absent records → your choice below.</div>
                 ${noPunchNote}
             `;
+            document.getElementById('finalStatusGroup').style.display = hasAbsentInBulk ? 'block' : 'none';
+            document.querySelector('input[name="finalStatus"][value="P"]').checked = true;
             document.getElementById('approveReason').value = '';
             document.getElementById('approveModal').classList.add('active');
         }
@@ -854,6 +876,8 @@
                 return;
             }
 
+            const chosenStatus = document.querySelector('input[name="finalStatus"]:checked')?.value || 'P';
+
             try {
                 SyncIndicator.show('Approving...');
 
@@ -865,11 +889,12 @@
                         const record = getRecordByKey(key);
                         if (!record) continue;
 
+                        const finalStatus = record.auto_status === 'A' ? chosenStatus : 'P';
                         let result;
                         if (record.id) {
-                            result = await ReportAPI.approveLOP(record.id, reason);
+                            result = await ReportAPI.approveLOP(record.id, reason, null, null, null, finalStatus);
                         } else {
-                            result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                            result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id, finalStatus);
                         }
 
                         if (result.success) {
@@ -887,12 +912,13 @@
                     clearSelection();
                 } else {
                     const record = pendingApproveRecord;
+                    const finalStatus = record.auto_status === 'A' ? chosenStatus : 'P';
                     let result;
 
                     if (record.id) {
-                        result = await ReportAPI.approveLOP(record.id, reason);
+                        result = await ReportAPI.approveLOP(record.id, reason, null, null, null, finalStatus);
                     } else {
-                        result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                        result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id, finalStatus);
                     }
                     
                     if (!result.success) throw new Error(result.error);
