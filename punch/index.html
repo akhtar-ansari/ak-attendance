@@ -627,7 +627,11 @@ window.onload = async function() {
     console.log('[Init] Starting punch terminal...');
 
     // Step 1: Initialize offline storage FIRST
+try {
     await OfflineStorage.init();
+} catch (e) {
+    console.warn('[Init] IndexedDB unavailable, continuing without offline storage:', e);
+}
 
     // Step 2: Get client code from URL or localStorage
 let clientCode = getClientCodeFromURL();
