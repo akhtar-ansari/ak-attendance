@@ -3,9 +3,22 @@
 
 const AUTH = {
     SESSION_KEY: 'ak_attendance_session',
-    
+
     // Default AK Client ID (for backward compatibility)
     AK_CLIENT_ID: '00000000-0000-0000-0000-000000000001',
+
+    // Hash password using SHA-256 with username as salt
+    async hashPassword(username, password) {
+        const data = new TextEncoder().encode(username.toLowerCase() + ':' + password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    },
+
+    // Check if a value is already a SHA-256 hash (64 hex characters)
+    isHashed(value) {
+        return /^[a-f0-9]{64}$/.test(value);
+    },
 
     // Login user with client code
     async login(clientCode, username, password) {
@@ -38,7 +51,16 @@ const AUTH = {
                 return { success: false, error: 'User not found for this client' };
             }
 
-            if (userData.password_hash !== password) {
+            // Support both hashed and plaintext passwords during migration
+            let passwordMatch = false;
+            if (this.isHashed(userData.password_hash)) {
+                const hashedInput = await this.hashPassword(username, password);
+                passwordMatch = hashedInput === userData.password_hash;
+            } else {
+                passwordMatch = userData.password_hash === password;
+            }
+
+            if (!passwordMatch) {
                 return { success: false, error: 'Invalid password' };
             }
 
