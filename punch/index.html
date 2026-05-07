@@ -1264,13 +1264,6 @@ localStorage.setItem('pwa_client_code', clientCode);
 
                 if (bestMatch) {
                     document.getElementById('verifyingMessage').textContent = `Welcome ${bestMatch.name}! Loading...`;
-                    
-                    try {
-                        await SyncManager.syncAll();
-                    } catch (e) {
-                        console.log('Sync skipped:', e);
-                    }
-                    
                     await showAttendance(bestMatch);
                 } else {
                     document.getElementById('verifyingMessage').textContent = 'Face not recognized. Try again...';
@@ -1317,19 +1310,23 @@ localStorage.setItem('pwa_client_code', clientCode);
                         <div class="summary-warning">⚠️ No punches recorded today</div>
                     `;
                 } else {
-                    listEl.innerHTML = punches.map(p => `
+                    listEl.innerHTML = punches.map(p => {
+                        const isIn = p.type === 'login';
+                        const label = isIn ? 'CHECK IN' : (p.type === 'logout' ? 'CHECK OUT' : 'PUNCH');
+                        const labelClass = isIn ? 'login' : 'logout';
+                        return `
                         <div class="punch-item">
-                            <div class="punch-type ${p.type}">
-                                ${p.type === 'login' ? '🟢' : '🔴'}
+                            <div class="punch-type ${labelClass}">
+                                ${isIn ? '🟢' : '🔴'}
                             </div>
                             <div class="punch-details">
-                                <div class="type-label ${p.type}">${p.type.toUpperCase()}</div>
+                                <div class="type-label ${labelClass}">${label}</div>
                                 <div class="time">${formatTime(p.time)}</div>
                                 <div class="location">📍 ${p.location_name || 'Unknown'}</div>
                             </div>
                             ${p.photo_url ? `<img class="punch-photo" src="${p.photo_url}" onclick="openFullscreenPhoto('${p.photo_url}')" alt="Punch Photo">` : ''}
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
 
                     const { totalHours, stillIn } = calculateAttendance(punches);
 
