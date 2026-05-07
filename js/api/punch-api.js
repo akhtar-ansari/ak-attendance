@@ -246,7 +246,7 @@ const PunchAPI = {
                     department_id: punch.departmentId,
                     date: punchDate,
                     time: punch.time,
-                    type: 'punch',
+                    type: punch.type,
                     location_id: punch.locationId,
                     location_name: punch.locationName,
                     confidence: punch.confidence,
@@ -258,13 +258,13 @@ const PunchAPI = {
 
             if (error) throw error;
 
-            // Update daily attendance
-            await supabaseClient.rpc('update_daily_attendance', {
+            // Post-insert processing — failures here must NOT cause a false { success: false }
+            // because the punch record is already saved in the DB.
+            supabaseClient.rpc('update_daily_attendance', {
                 p_labor_id: punch.laborId,
                 p_date: punchDate
-            });
+            }).catch(e => console.warn('[PunchAPI] update_daily_attendance failed:', e));
 
-            // Auto-create draft LOP if hours < 10
             LOPAPI.autoCreateDraft(punch.laborId, punch.date, punch.departmentId).catch(e => {
                 console.log('Auto draft check:', e.message);
             });

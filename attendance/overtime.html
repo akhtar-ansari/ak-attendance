@@ -686,12 +686,9 @@
             try {
                 SyncIndicator.show('Loading history...');
 
-                const { data, error } = await supabaseClient
+                const { data: records, error } = await supabaseClient
                     .from('overtime_records')
-                    .select(`
-                        *,
-                        laborers:labor_id (name, role)
-                    `)
+                    .select('*')
                     .eq('client_id', clientId)
                     .lte('from_date', toDate)
                     .gte('to_date', fromDate)
@@ -699,7 +696,23 @@
 
                 if (error) throw error;
 
-                renderHistory(data || []);
+                // Fetch laborer names separately (no FK join needed)
+                const laborIds = [...new Set((records || []).map(r => r.labor_id))];
+                let laborerMap = {};
+                if (laborIds.length > 0) {
+                    const { data: laborers } = await supabaseClient
+                        .from('laborers')
+                        .select('labor_id, name, role')
+                        .in('labor_id', laborIds);
+                    (laborers || []).forEach(l => { laborerMap[l.labor_id] = l; });
+                }
+
+                const enriched = (records || []).map(r => ({
+                    ...r,
+                    laborers: laborerMap[r.labor_id] || null
+                }));
+
+                renderHistory(enriched);
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();

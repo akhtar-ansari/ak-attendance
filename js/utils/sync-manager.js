@@ -134,7 +134,7 @@ const SyncManager = {
                             department_id: punch.departmentId,
                             date: punch.date,
                             time: punch.time,
-                            type: 'punch',
+                            type: punch.type,
                             location_id: punch.locationId,
                             location_name: punch.locationName,
                             confidence: punch.confidence,
