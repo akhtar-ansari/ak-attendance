@@ -317,13 +317,20 @@
                                     <option value="approved">Approved</option>
                                 </select>
                             </th>
+                            <th>Freeze
+                                <select id="cfFreeze" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="frozen">Frozen</option>
+                                    <option value="open">Open</option>
+                                </select>
+                            </th>
                             <th>OT</th>
                             <th>Photos</th>
                         </tr>
                     </thead>
                     <tbody id="reportTable">
                         <tr>
-                            <td colspan="16" class="text-center p-20 text-muted">
+                            <td colspan="17" class="text-center p-20 text-muted">
                                 Select date range and click "Generate"
                             </td>
                         </tr>
@@ -598,6 +605,7 @@
             const cfAuto     = document.getElementById('cfAuto')?.value || '';
             const cfFinal    = document.getElementById('cfFinal')?.value || '';
             const cfLOP      = document.getElementById('cfLOP')?.value || '';
+            const cfFreeze   = document.getElementById('cfFreeze')?.value || '';
 
             filteredData = reportData.filter(r => {
                 if (cfDate && !DateUtils.formatDate(r.date).toLowerCase().includes(cfDate)) return false;
@@ -612,6 +620,8 @@
                 if (cfFinal && r.final_status !== cfFinal) return false;
                 if (cfLOP === 'pending' && !((r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by)) return false;
                 if (cfLOP === 'approved' && !r.approved_by) return false;
+                if (cfFreeze === 'frozen' && !isDateFrozen(r.date)) return false;
+                if (cfFreeze === 'open' && isDateFrozen(r.date)) return false;
                 return true;
             });
 
@@ -637,7 +647,7 @@
             const tbody = document.getElementById('reportTable');
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="16" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="17" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
                 return;
             }
 
@@ -702,6 +712,10 @@
                     ? '<span class="badge" style="background:#c6f6d5;color:#22543d;">Yes</span>'
                     : '<span class="badge" style="background:#fed7d7;color:#c53030;">No</span>';
 
+                const freezeCell = dateFrozen
+                    ? `<span class="frozen-badge">🔒 Frozen</span>`
+                    : `<span style="color:#a0aec0;font-size:12px;">—</span>`;
+
                 return `
                     <tr class="${rowClass}">
                         <td>${checkboxHtml}</td>
@@ -718,6 +732,7 @@
                         <td><span class="badge ${autoStatusClass}">${autoStatusText}</span></td>
                         <td><span class="badge ${finalStatusClass}">${finalStatusText}</span></td>
                         <td>${lopActionHtml}</td>
+                        <td>${freezeCell}</td>
                         <td>${otDisplay}</td>
                         <td>${photoBtn}</td>
                     </tr>
