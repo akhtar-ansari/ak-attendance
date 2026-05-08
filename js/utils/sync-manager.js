@@ -153,11 +153,14 @@ const SyncManager = {
                     recalculateSet.add(`${punch.laborId}|${punch.date}`);
                     
                     // Update last_sync_at for this laborer
-                    await supabaseClient
+                    const { error: syncAtError } = await supabaseClient
                         .from('laborers')
                         .update({ last_sync_at: new Date().toISOString() })
                         .eq('labor_id', punch.laborId)
                         .eq('client_id', punchClientId);
+                    if (syncAtError) {
+                        console.warn(`[SyncManager] Could not update last_sync_at for ${punch.laborId}:`, syncAtError.message);
+                    }
 
                 } catch (err) {
                     console.error(`[SyncManager] Failed to sync punch ${punch.id}:`, err);

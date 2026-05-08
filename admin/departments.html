@@ -33,6 +33,20 @@
                             <th>Created</th>
                             <th>Actions</th>
                         </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="col-filter" id="filterCode" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th><input type="text" class="col-filter" id="filterDeptName" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th></th>
+                            <th>
+                                <select class="col-filter" id="filterDeptStatus" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </th>
+                            <th></th>
+                            <th></th>
+                        </tr>
                     </thead>
                     <tbody id="departmentTable">
                         <tr>
@@ -103,7 +117,6 @@
         // Format time for display (HH:MM)
         function formatMinHours(timeStr) {
             if (!timeStr) return '09:30';
-            // Handle both "09:30:00" and "09:30" formats
             return timeStr.substring(0, 5);
         }
 
@@ -111,16 +124,13 @@
         async function loadDepartments() {
             try {
                 SyncIndicator.show('Loading departments...');
-                
                 const result = await DepartmentAPI.getAll();
-                
                 if (result.success) {
                     departments = result.data;
-                    renderTable();
+                    renderTable(departments);
                 } else {
                     throw new Error(result.error);
                 }
-
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -133,11 +143,26 @@
             }
         }
 
+        function applyFilters() {
+            const searchCode = (document.getElementById('filterCode')?.value || '').toLowerCase();
+            const searchName = (document.getElementById('filterDeptName')?.value || '').toLowerCase();
+            const statusFilter = document.getElementById('filterDeptStatus')?.value || '';
+
+            const filtered = departments.filter(d => {
+                const matchCode = !searchCode || d.code.toLowerCase().includes(searchCode);
+                const matchName = !searchName || d.name.toLowerCase().includes(searchName);
+                const matchStatus = !statusFilter || d.status === statusFilter;
+                return matchCode && matchName && matchStatus;
+            });
+            renderTable(filtered);
+        }
+
         // Render table
-        function renderTable() {
+        function renderTable(data) {
+            data = data || departments;
             const tbody = document.getElementById('departmentTable');
 
-            if (departments.length === 0) {
+            if (data.length === 0) {
                 tbody.innerHTML = `
                     <tr><td colspan="6" class="text-center p-20 text-muted">
                         No departments found. Click "Add Department" to create one.
@@ -146,7 +171,7 @@
                 return;
             }
 
-            tbody.innerHTML = departments.map(dept => `
+            tbody.innerHTML = data.map(dept => `
                 <tr>
                     <td><strong>${dept.code}</strong></td>
                     <td>${dept.name}</td>
