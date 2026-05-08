@@ -68,19 +68,14 @@ const ReportAPI = {
             const bufferFromStr = `${bufferFrom.getFullYear()}-${pad(bufferFrom.getMonth()+1)}-${pad(bufferFrom.getDate())}`;
             const bufferToStr = `${bufferTo.getFullYear()}-${pad(bufferTo.getMonth()+1)}-${pad(bufferTo.getDate())}`;
 
+            // Run all remaining queries in parallel to minimise latency
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('*')
                 .eq('client_id', clientId)
                 .gte('date', bufferFromStr)
                 .lte('date', bufferToStr);
-
-            if (departmentFilter) {
-                attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
-            }
-
-            const { data: attendance, error: attError } = await attendanceQuery;
-            if (attError) throw attError;
+            if (departmentFilter) attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
 
             let punchQuery = supabaseClient
                 .from('punch_records')
@@ -89,57 +84,57 @@ const ReportAPI = {
                 .gte('date', fromDate)
                 .lte('date', toDate)
                 .order('time', { ascending: true });
+            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
 
-            if (departmentFilter) {
-                punchQuery = punchQuery.eq('department_id', departmentFilter);
-            }
-
-            const { data: punches, error: punchError } = await punchQuery;
-            if (punchError) throw punchError;
-
-            const punchLocationMap = {};
-            (punches || []).forEach(p => {
-                const key = `${p.labor_id}_${p.date}`;
-                if (!punchLocationMap[key]) {
-                    punchLocationMap[key] = p.location_name || '';
-                }
-            });
-
-            const { data: departments } = await supabaseClient
+            const deptQuery = supabaseClient
                 .from('departments')
-                .select('id, name')
+                .select('id, name, min_hours_full_day')
                 .eq('client_id', clientId);
 
-            const deptMap = {};
-            (departments || []).forEach(d => deptMap[d.id] = d.name);
-
-            // Fetch holidays with buffer range for cross-boundary checks
-            const { data: holidaysData } = await supabaseClient
+            const holidayQuery = supabaseClient
                 .from('holidays')
                 .select('date, name')
                 .eq('client_id', clientId)
                 .eq('is_active', true)
                 .gte('date', bufferFromStr)
                 .lte('date', bufferToStr);
-            const holidayMap = {};
-            (holidaysData || []).forEach(h => { holidayMap[h.date] = h.name; });
 
-            // Load sandwich toggles — default ON if not set
-            const { data: settingsData } = await supabaseClient
+            const settingsQuery = supabaseClient
                 .from('settings')
                 .select('key, value')
                 .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
+
+            const [
+                { data: attendance, error: attError },
+                { data: punches, error: punchError },
+                { data: departments },
+                { data: holidaysData },
+                { data: settingsData }
+            ] = await Promise.all([attendanceQuery, punchQuery, deptQuery, holidayQuery, settingsQuery]);
+
+            if (attError) throw attError;
+            if (punchError) throw punchError;
+
+            const punchLocationMap = {};
+            (punches || []).forEach(p => {
+                const key = `${p.labor_id}_${p.date}`;
+                if (!punchLocationMap[key]) punchLocationMap[key] = p.location_name || '';
+            });
+
+            const deptMap = {};
+            const deptMinHoursMap = {};
+            (departments || []).forEach(d => {
+                deptMap[d.id] = d.name;
+                deptMinHoursMap[d.id] = d.min_hours_full_day || '09:30';
+            });
+
+            const holidayMap = {};
+            (holidaysData || []).forEach(h => { holidayMap[h.date] = h.name; });
+
             const settingsMap = {};
             (settingsData || []).forEach(s => { settingsMap[s.key] = s.value; });
             const fridaySandwichEnabled = settingsMap['sandwich_rule_friday'] !== 'false';
             const nhSandwichEnabled = settingsMap['sandwich_rule_nh'] !== 'false';
-
-            const { data: deptData } = await supabaseClient
-                .from('departments')
-                .select('id, min_hours_full_day')
-                .eq('client_id', clientId);
-            const deptMinHoursMap = {};
-            (deptData || []).forEach(d => { deptMinHoursMap[d.id] = d.min_hours_full_day || '09:30'; });
 
             const attendanceMap = {};
             (attendance || []).forEach(a => {
@@ -950,6 +945,7 @@ const ReportAPI = {
                 .from('daily_attendance')
                 .select('id', { count: 'exact', head: true })
                 .eq('client_id', AUTH.getClientId())
+                .eq('date', today)
                 .in('final_status', ['H', 'A'])
                 .is('approved_by', null);
 
