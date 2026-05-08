@@ -9,50 +9,70 @@
         .controls-bar {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             flex-wrap: wrap;
             background: #f7fafc;
-            padding: 12px 16px;
+            padding: 8px 14px;
             border-radius: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
         .controls-bar label {
             font-size: 12px;
             color: #555;
-            margin-right: 4px;
         }
-        .controls-bar .form-control {
-            padding: 6px 10px;
+        .controls-bar input[type="date"] {
+            width: 130px;
+            padding: 5px 8px;
             font-size: 13px;
         }
-        .controls-bar .spacer { flex: 1; }
         /* Compact summary strip */
         .summary-strip {
             display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 8px;
             flex-wrap: wrap;
         }
         .scard {
             background: white;
-            border-radius: 8px;
-            padding: 6px 14px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            border-radius: 6px;
+            padding: 4px 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.07);
             display: flex;
             align-items: center;
-            gap: 8px;
-            flex: 1;
-            min-width: 90px;
+            gap: 6px;
+            flex: 0 0 auto;
         }
         .sval {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: bold;
             line-height: 1;
         }
         .slbl {
-            font-size: 11px;
-            color: #666;
+            font-size: 10px;
+            color: #888;
         }
+        /* Compact table rows */
+        #reportTable td {
+            padding: 4px 8px;
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        /* Filter inside column header */
+        thead th .col-filter {
+            display: block;
+            width: 100%;
+            margin-top: 4px;
+            font-weight: normal;
+            font-size: 11px;
+            padding: 2px 5px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            box-sizing: border-box;
+        }
+        thead th .col-filter::placeholder { color: rgba(255,255,255,0.6); }
+        thead th select.col-filter option { color: #333; background: white; }
         .status-P { color: #22543d; background: #c6f6d5; }
         .status-H { color: #975a16; background: #fefcbf; }
         .status-A { color: #c53030; background: #fed7d7; }
@@ -249,45 +269,27 @@
                             <th style="width: 40px;">
                                 <input type="checkbox" id="selectAll" class="lop-checkbox" onchange="toggleSelectAll()" title="Select All">
                             </th>
-                            <th>Date</th>
-                            <th>Labor ID</th>
-                            <th>Name</th>
-                            <th>Department</th>
-                            <th>Role</th>
-                            <th>Location</th>
-                            <th>Is Punch</th>
-                            <th>Login</th>
-                            <th>Logout</th>
-                            <th>Hours</th>
-                            <th>Auto</th>
-                            <th>Final</th>
-                            <th>LOP Action</th>
-                            <th>OT</th>
-                            <th>Photos</th>
-                        </tr>
-                        <tr class="filter-row">
-                            <th></th>
-                            <th><input type="text" id="cfDate" class="col-filter" placeholder="Date…" oninput="applyColumnFilters()"></th>
-                            <th><input type="text" id="cfId" class="col-filter" placeholder="ID…" oninput="applyColumnFilters()"></th>
-                            <th><input type="text" id="cfName" class="col-filter" placeholder="Name…" oninput="applyColumnFilters()"></th>
-                            <th>
+                            <th>Date<input type="text" id="cfDate" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Labor ID<input type="text" id="cfId" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Name<input type="text" id="cfName" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Department
                                 <select id="cfDept" class="col-filter" onchange="applyColumnFilters()">
                                     <option value="">All</option>
                                 </select>
                             </th>
-                            <th><input type="text" id="cfRole" class="col-filter" placeholder="Role…" oninput="applyColumnFilters()"></th>
-                            <th><input type="text" id="cfLocation" class="col-filter" placeholder="Location…" oninput="applyColumnFilters()"></th>
-                            <th>
+                            <th>Role<input type="text" id="cfRole" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Location<input type="text" id="cfLocation" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Is Punch
                                 <select id="cfPunch" class="col-filter" onchange="applyColumnFilters()">
                                     <option value="">All</option>
                                     <option value="yes">Yes</option>
                                     <option value="no">No</option>
                                 </select>
                             </th>
-                            <th></th>
-                            <th></th>
-                            <th></th>
-                            <th>
+                            <th>Login</th>
+                            <th>Logout</th>
+                            <th>Hours</th>
+                            <th>Auto
                                 <select id="cfAuto" class="col-filter" onchange="applyColumnFilters()">
                                     <option value="">All</option>
                                     <option value="P">P</option>
@@ -297,7 +299,7 @@
                                     <option value="NH">NH</option>
                                 </select>
                             </th>
-                            <th>
+                            <th>Final
                                 <select id="cfFinal" class="col-filter" onchange="applyColumnFilters()">
                                     <option value="">All</option>
                                     <option value="P">P</option>
@@ -307,15 +309,15 @@
                                     <option value="NH">NH</option>
                                 </select>
                             </th>
-                            <th>
+                            <th>LOP Action
                                 <select id="cfLOP" class="col-filter" onchange="applyColumnFilters()">
                                     <option value="">All</option>
                                     <option value="pending">Pending</option>
                                     <option value="approved">Approved</option>
                                 </select>
                             </th>
-                            <th></th>
-                            <th></th>
+                            <th>OT</th>
+                            <th>Photos</th>
                         </tr>
                     </thead>
                     <tbody id="reportTable">
@@ -695,7 +697,6 @@
                     ? `<button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">📷 View</button>`
                     : `<button class="photo-btn" disabled title="No punch">📷 -</button>`;
 
-                const noPunchBadge = isNoPunch ? '<span class="no-punch-badge">No Punch</span>' : '';
                 const isPunchBadge = record.hasRecord
                     ? '<span class="badge" style="background:#c6f6d5;color:#22543d;">Yes</span>'
                     : '<span class="badge" style="background:#fed7d7;color:#c53030;">No</span>';
@@ -705,7 +706,7 @@
                         <td>${checkboxHtml}</td>
                         <td>${DateUtils.formatDate(record.date)}</td>
                         <td><strong>${record.labor_id}</strong></td>
-                        <td>${record.laborName || 'Unknown'} ${noPunchBadge}</td>
+                        <td>${record.laborName || 'Unknown'}</td>
                         <td>${record.departmentName || '-'}</td>
                         <td>${record.role || 'Labor'}</td>
                         <td>${record.punchLocation || '-'}</td>
