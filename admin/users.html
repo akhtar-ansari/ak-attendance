@@ -51,6 +51,31 @@
                             <th>Created</th>
                             <th>Actions</th>
                         </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="col-filter" id="filterUsername" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th><input type="text" class="col-filter" id="filterName" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th>
+                                <select class="col-filter" id="filterRole" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="supervisor">Supervisor</option>
+                                </select>
+                            </th>
+                            <th>
+                                <select class="col-filter" id="filterDept" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                </select>
+                            </th>
+                            <th>
+                                <select class="col-filter" id="filterStatus" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </th>
+                            <th></th>
+                            <th></th>
+                        </tr>
                     </thead>
                     <tbody id="userTable">
                         <tr>
@@ -151,13 +176,19 @@
                 if (deptResult.success) {
                     departments = deptResult.data;
                     populateDepartmentDropdown();
+                    const filterDept = document.getElementById('filterDept');
+                    if (filterDept) {
+                        departments.forEach(dept => {
+                            filterDept.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+                        });
+                    }
                 }
 
                 // Load users
                 const userResult = await UserAPI.getAll();
                 if (userResult.success) {
                     users = userResult.data;
-                    renderTable();
+                    renderTable(users);
                 } else {
                     throw new Error(userResult.error);
                 }
@@ -174,11 +205,29 @@
             }
         }
 
+        function applyFilters() {
+            const searchUser = (document.getElementById('filterUsername')?.value || '').toLowerCase();
+            const searchName = (document.getElementById('filterName')?.value || '').toLowerCase();
+            const roleFilter = document.getElementById('filterRole')?.value || '';
+            const deptFilter = document.getElementById('filterDept')?.value || '';
+            const statusFilter = document.getElementById('filterStatus')?.value || '';
+
+            const filtered = users.filter(u => {
+                const matchUser = !searchUser || u.username.toLowerCase().includes(searchUser);
+                const matchName = !searchName || u.name.toLowerCase().includes(searchName);
+                const matchRole = !roleFilter || u.role === roleFilter;
+                const matchDept = !deptFilter || u.department_id === deptFilter;
+                const matchStatus = !statusFilter || u.status === statusFilter;
+                return matchUser && matchName && matchRole && matchDept && matchStatus;
+            });
+            renderTable(filtered);
+        }
+
         // Populate department dropdown
         function populateDepartmentDropdown() {
             const select = document.getElementById('userDepartment');
             select.innerHTML = '<option value="">-- Select Department --</option>';
-            
+
             departments.forEach(dept => {
                 if (dept.status === 'active') {
                     select.innerHTML += `<option value="${dept.id}">${dept.name} (${dept.code})</option>`;
@@ -187,10 +236,11 @@
         }
 
         // Render table
-        function renderTable() {
+        function renderTable(data) {
+            data = data || users;
             const tbody = document.getElementById('userTable');
 
-            if (users.length === 0) {
+            if (data.length === 0) {
                 tbody.innerHTML = `
                     <tr><td colspan="7" class="text-center p-20 text-muted">
                         No users found. Click "Add User" to create one.
@@ -204,7 +254,7 @@
                 'supervisor': 'Supervisor'
             };
 
-            tbody.innerHTML = users.map(user => `
+            tbody.innerHTML = data.map(user => `
                 <tr>
                     <td><strong>${user.username}</strong></td>
                     <td>${user.name}</td>
