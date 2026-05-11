@@ -264,10 +264,15 @@
                     
                     <div class="form-group">
                         <label>Status</label>
-                        <select id="laborStatus" class="form-control">
+                        <select id="laborStatus" class="form-control" onchange="toggleLastWorkingDate()">
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
+                    </div>
+                    <div class="form-group" id="lastWorkingDateGroup" style="display:none;">
+                        <label>Last Working Date <span style="color:red;">*</span></label>
+                        <input type="date" id="laborLastWorkingDate" class="form-control">
+                        <div id="lastPunchInfo" style="font-size:12px; color:#718096; margin-top:4px;"></div>
                     </div>
                 </div>
             </div>
@@ -571,6 +576,13 @@
             document.getElementById('laborModal').classList.add('active');
         }
 
+        // Toggle Last Working Date field visibility
+        function toggleLastWorkingDate() {
+            const status = document.getElementById('laborStatus').value;
+            document.getElementById('lastWorkingDateGroup').style.display =
+                status === 'inactive' ? 'block' : 'none';
+        }
+
         // Edit labor
         function editLabor(laborId) {
             const labor = laborers.find(l => l.labor_id === laborId);
@@ -580,11 +592,29 @@
             document.getElementById('editLaborId').value = labor.labor_id;
             document.getElementById('laborName').value = labor.name;
             document.getElementById('laborIqama').value = labor.iqama_number;
-            document.getElementById('laborIqama').disabled = true; // Can't change Iqama
+            document.getElementById('laborIqama').disabled = true;
             document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
             document.getElementById('laborNationality').value = labor.nationality;
             document.getElementById('laborDepartment').value = labor.department_id;
             document.getElementById('laborStatus').value = labor.status;
+            document.getElementById('laborLastWorkingDate').value =
+                labor.last_working_date ? DateUtils.formatForInput(labor.last_working_date) : '';
+            document.getElementById('lastPunchInfo').textContent = '';
+            toggleLastWorkingDate();
+
+            // Show last punch hint asynchronously
+            supabaseClient.from('punch_records')
+                .select('date')
+                .eq('client_id', AUTH.getClientId())
+                .eq('labor_id', labor.labor_id)
+                .order('date', { ascending: false })
+                .limit(1)
+                .then(({ data }) => {
+                    if (data && data[0]) {
+                        document.getElementById('lastPunchInfo').textContent =
+                            `Last punch recorded: ${DateUtils.formatDate(data[0].date)}`;
+                    }
+                });
 
             document.getElementById('laborModal').classList.add('active');
         }
@@ -603,11 +633,42 @@
             const nationality = document.getElementById('laborNationality').value.trim();
             const departmentId = document.getElementById('laborDepartment').value;
             const status = document.getElementById('laborStatus').value;
+            const lastWorkingDate = document.getElementById('laborLastWorkingDate').value || null;
 
-            // Validation
             if (!name || !iqamaNumber || !dateOfJoining || !nationality || !departmentId) {
                 Toast.error('Please fill all required fields');
                 return;
+            }
+
+            // Require last working date when marking inactive
+            if (status === 'inactive' && !lastWorkingDate) {
+                Toast.error('Please enter a Last Working Date before marking as inactive');
+                document.getElementById('laborLastWorkingDate').focus();
+                return;
+            }
+
+            // Validate last working date is not before last punch date
+            if (status === 'inactive' && lastWorkingDate && editLaborId) {
+                try {
+                    const { data: lastPunch } = await supabaseClient
+                        .from('punch_records')
+                        .select('date')
+                        .eq('client_id', AUTH.getClientId())
+                        .eq('labor_id', editLaborId)
+                        .order('date', { ascending: false })
+                        .limit(1);
+
+                    if (lastPunch && lastPunch[0] && lastWorkingDate < lastPunch[0].date) {
+                        Toast.error(
+                            `Last working date cannot be before the last recorded punch (${DateUtils.formatDate(lastPunch[0].date)}). ` +
+                            `Please enter a date on or after ${DateUtils.formatDate(lastPunch[0].date)}.`
+                        );
+                        return;
+                    }
+                } catch (e) {
+                    // Non-blocking — skip validation if query fails
+                    console.warn('Could not validate last punch date:', e);
+                }
             }
 
             try {
@@ -620,7 +681,8 @@
                         dateOfJoining,
                         nationality,
                         departmentId,
-                        status
+                        status,
+                        lastWorkingDate: status === 'inactive' ? lastWorkingDate : null
                     });
                 } else {
                     result = await LaborAPI.create({
