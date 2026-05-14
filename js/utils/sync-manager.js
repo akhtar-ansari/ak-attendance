@@ -126,6 +126,22 @@ const SyncManager = {
                     // Use client_id from punch data (saved during offline punch) or fall back to current session
                     const punchClientId = punch.clientId || clientId;
 
+                    // Check for duplicate before inserting
+                    const { data: existing } = await supabaseClient
+                        .from('punch_records')
+                        .select('id')
+                        .eq('client_id', punchClientId)
+                        .eq('labor_id', punch.laborId)
+                        .eq('date', punch.date)
+                        .eq('time', punch.time)
+                        .maybeSingle();
+
+                    if (existing) {
+                        await OfflineStorage.markPunchSynced(punch.id);
+                        console.log(`[SyncManager] Punch ${punch.id} already in DB, skipping duplicate`);
+                        continue;
+                    }
+
                     // Save punch to server
                     const { data, error } = await supabaseClient
                         .from('punch_records')
