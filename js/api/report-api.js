@@ -116,9 +116,15 @@ const ReportAPI = {
             if (punchError) throw punchError;
 
             const punchLocationMap = {};
+            const punchTimeMap = {};
             (punches || []).forEach(p => {
                 const key = `${p.labor_id}_${p.date}`;
                 if (!punchLocationMap[key]) punchLocationMap[key] = p.location_name || '';
+                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: p.time, lastOut: p.time };
+                else {
+                    if (p.time < punchTimeMap[key].firstIn) punchTimeMap[key].firstIn = p.time;
+                    if (p.time > punchTimeMap[key].lastOut) punchTimeMap[key].lastOut = p.time;
+                }
             });
 
             const deptMap = {};
@@ -225,10 +231,29 @@ const ReportAPI = {
                         sandwichStatus = (thuStatus === 'A' && satStatus === 'A') ? 'A' : 'F';
                     }
 
-                    if (record) {
-                        const effectiveStatus = sandwichStatus || record.final_status;
+                    const punchTimes = punchTimeMap[key];
+                    if (record || punchTimes) {
+                        // Always derive login/logout from actual punch records if available
+                        const firstLogin = punchTimes ? punchTimes.firstIn : (record?.first_login || null);
+                        const lastLogout = punchTimes ? punchTimes.lastOut : (record?.last_logout || null);
+                        const totalHours = (firstLogin && lastLogout)
+                            ? this.calculateHours(firstLogin, lastLogout) / 60
+                            : (record?.total_hours || null);
+                        const autoStatus = (firstLogin && lastLogout)
+                            ? this.determineStatus(this.calculateHours(firstLogin, lastLogout), minHours)
+                            : (isNH ? 'NH' : (isFriday ? 'F' : 'A'));
+                        // Keep final_status only when manually overridden (LOP or manual approval)
+                        const manualOverride = record && ['LP','LH','LA'].includes(record.final_status);
+                        const effectiveStatus = sandwichStatus || (manualOverride ? record.final_status : autoStatus);
                         result.push({
-                            ...record,
+                            ...(record || {}),
+                            labor_id: labor.labor_id,
+                            department_id: labor.department_id,
+                            date: dateStr,
+                            first_login: firstLogin,
+                            last_logout: lastLogout,
+                            total_hours: totalHours,
+                            auto_status: autoStatus,
                             final_status: effectiveStatus,
                             laborName: labor.name,
                             role: labor.role || 'Labor',
