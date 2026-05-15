@@ -235,6 +235,7 @@
                 <input type="date" id="toDate" class="form-control">
                 <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate</button>
                 <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
+                <button type="button" class="btn btn-secondary" id="recalcBtn" onclick="recalculateAttendance()" style="display:none;">🔄 Recalculate</button>
                 <button type="button" class="freeze-btn" id="freezeBtn" onclick="freezeSelectedDate()" style="display: none;">🔒 Freeze Day</button>
             </div>
 
@@ -444,7 +445,8 @@
 
         const session = AUTH.getSession();
         const isAdmin = session.role === 'admin';
-        
+        if (isAdmin) document.getElementById('recalcBtn').style.display = '';
+
         let departments = [];
         let laborers = [];
         let reportData = [];
@@ -592,6 +594,52 @@
                 Toast.error('Failed to generate report: ' + error.message);
                 console.error(error);
             }
+        }
+
+        async function recalculateAttendance() {
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+
+            if (!fromDate || !toDate) {
+                Toast.error('Please select a date range first');
+                return;
+            }
+
+            const clientId = AUTH.getClientId();
+
+            // Get all distinct labor_ids that have punches in this date range
+            const { data: punches, error } = await supabaseClient
+                .from('punch_records')
+                .select('labor_id, date')
+                .eq('client_id', clientId)
+                .gte('date', fromDate)
+                .lte('date', toDate);
+
+            if (error) { Toast.error('Failed: ' + error.message); return; }
+            if (!punches || punches.length === 0) { Toast.error('No punches found in this date range'); return; }
+
+            // Build unique labor+date pairs
+            const pairs = [...new Map(punches.map(p => [`${p.labor_id}_${p.date}`, p])).values()];
+
+            SyncIndicator.show(`Recalculating ${pairs.length} records...`);
+
+            let done = 0, failed = 0;
+            for (const p of pairs) {
+                const { error: rpcError } = await supabaseClient.rpc('update_daily_attendance', {
+                    p_labor_id: p.labor_id,
+                    p_date: p.date
+                });
+                if (rpcError) failed++;
+                else done++;
+            }
+
+            SyncIndicator.hide();
+
+            if (failed > 0) Toast.error(`Done: ${done} updated, ${failed} failed`);
+            else Toast.success(`Recalculated ${done} attendance records`);
+
+            // Refresh the report
+            generateReport();
         }
 
         function applyColumnFilters() {
