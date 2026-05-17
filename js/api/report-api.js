@@ -563,14 +563,19 @@ const ReportAPI = {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     },
 
-    // Calculate hours between two time strings
+    // Calculate hours between two time strings (handles cross-midnight night shifts)
     calculateHours(firstIn, lastOut) {
         if (!firstIn || !lastOut) return 0;
         try {
-            const inMinutes = this.parseTimeToMinutes(firstIn);
+            const inMinutes  = this.parseTimeToMinutes(firstIn);
             const outMinutes = this.parseTimeToMinutes(lastOut);
-            if (outMinutes <= inMinutes) return 0;
-            return outMinutes - inMinutes;
+            if (outMinutes > inMinutes) return outMinutes - inMinutes;
+            // Cross-midnight: logout time is less than login (night shift spanning midnight)
+            // Guard: only treat as cross-midnight if the apparent "backwards" gap exceeds 6h
+            if (inMinutes - outMinutes > 6 * 60) {
+                return (24 * 60 - inMinutes) + outMinutes;
+            }
+            return 0;
         } catch {
             return 0;
         }

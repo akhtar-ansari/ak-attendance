@@ -265,6 +265,20 @@
                     </div>
                     <input type="number" class="setting-input" id="max_punches_per_day" min="2" max="999">
                 </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Night Shift Start</div>
+                        <div class="setting-desc">Time when a night shift begins. A punch at or after this time confirms a night shift is in progress (e.g. 20:00).</div>
+                    </div>
+                    <input type="time" class="setting-input" id="night_shift_start">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Night Shift End</div>
+                        <div class="setting-desc">Time when a night shift ends. Punches at or before this time next morning are assigned to the previous night (e.g. 06:30).</div>
+                    </div>
+                    <input type="time" class="setting-input" id="night_shift_end">
+                </div>
             </div>
 
             <!-- Sandwich Rules -->
@@ -436,7 +450,8 @@
                 SyncIndicator.show('Loading settings...');
                 const { data, error } = await supabaseClient
                     .from('settings')
-                    .select('*');
+                    .select('*')
+                    .eq('client_id', AUTH.getClientId());
                 if (error) throw error;
                 data.forEach(setting => {
                     const el = document.getElementById(setting.key);
@@ -448,6 +463,14 @@
                     }
                     originalSettings[setting.key] = setting.value;
                 });
+                // Apply defaults for settings not yet saved for this client
+                const settingDefaults = { night_shift_start: '20:00', night_shift_end: '06:30' };
+                for (const [key, def] of Object.entries(settingDefaults)) {
+                    if (!(key in originalSettings)) {
+                        const el = document.getElementById(key);
+                        if (el) el.value = def;
+                    }
+                }
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -463,12 +486,15 @@
                 'confidence_threshold',
                 'reenrollment_threshold',
                 'reenrollment_attempts',
-                'photo_retention_days'
+                'photo_retention_days',
+                'night_shift_start',
+                'night_shift_end'
             ];
             const togglesToSave = [
                 'sandwich_rule_friday',
                 'sandwich_rule_nh'
             ];
+            const clientId = AUTH.getClientId();
 
             const minPresent = parseFloat(document.getElementById('min_hours_present').value);
             const minHalf = parseFloat(document.getElementById('min_hours_half_day').value);
@@ -487,24 +513,28 @@
             try {
                 SyncIndicator.show('Saving settings...');
 
-                // Save numeric settings (update only — these rows always exist)
+                // Save all input settings (upsert per client)
                 for (const key of settingsToSave) {
                     const input = document.getElementById(key);
-                    if (input && input.value !== originalSettings[key]) {
+                    if (!input) continue;
+                    const newValue = input.value;
+                    if (newValue !== originalSettings[key]) {
                         const { error } = await supabaseClient
                             .from('settings')
-                            .update({ value: input.value, updated_at: new Date().toISOString() })
-                            .eq('key', key);
+                            .upsert(
+                                { client_id: clientId, key, value: newValue, updated_at: new Date().toISOString() },
+                                { onConflict: 'client_id,key' }
+                            );
                         if (error) throw error;
                         await AUTH.logAction('UPDATE_SETTING', 'settings', key,
                             { value: originalSettings[key] },
-                            { value: input.value }
+                            { value: newValue }
                         );
-                        originalSettings[key] = input.value;
+                        originalSettings[key] = newValue;
                     }
                 }
 
-                // Save toggle settings (upsert — these rows may not exist for existing clients)
+                // Save toggle settings (upsert per client)
                 for (const key of togglesToSave) {
                     const el = document.getElementById(key);
                     if (!el) continue;
@@ -512,7 +542,10 @@
                     if (newValue !== originalSettings[key]) {
                         const { error } = await supabaseClient
                             .from('settings')
-                            .upsert({ key, value: newValue, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+                            .upsert(
+                                { client_id: clientId, key, value: newValue, updated_at: new Date().toISOString() },
+                                { onConflict: 'client_id,key' }
+                            );
                         if (error) throw error;
                         await AUTH.logAction('UPDATE_SETTING', 'settings', key,
                             { value: originalSettings[key] },
