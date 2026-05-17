@@ -443,7 +443,7 @@
         }
 
         const session = AUTH.getSession();
-        const isAdmin = session.role === 'admin';
+        const isAdmin = session.role === 'admin' || session.role === 'super_admin';
 
         let departments = [];
         let laborers = [];

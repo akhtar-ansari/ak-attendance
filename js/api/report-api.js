@@ -1041,7 +1041,7 @@ const ReportAPI = {
     // Bulk approve LOP (admin only)
     async bulkApproveLOP(attendanceIds, reason) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can bulk approve' };
             }
 
@@ -1069,7 +1069,7 @@ const ReportAPI = {
     // Undo LOP approval (admin only)
     async undoLOP(attendanceId, originalStatus) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can undo approval' };
             }
 
@@ -1127,7 +1127,7 @@ const ReportAPI = {
     // Freeze a date (admin only)
     async freezeDate(date) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can freeze attendance' };
             }
 
