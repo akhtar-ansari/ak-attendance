@@ -251,6 +251,8 @@ const PunchAPI = {
                 if (hadNightShiftPunch) punchDate = yesterdayStr;
             }
 
+            const isNightShiftEnd = (punchDate !== punch.date);
+
             const { data, error } = await supabaseClient
                 .from('punch_records')
                 .insert({
@@ -263,7 +265,8 @@ const PunchAPI = {
                     location_name: punch.locationName,
                     confidence: punch.confidence,
                     photo_url: punch.photoUrl,
-                    client_id: AUTH.getClientId()
+                    client_id: AUTH.getClientId(),
+                    is_night_shift_end: isNightShiftEnd
                 })
                 .select()
                 .single();
