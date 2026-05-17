@@ -1075,7 +1075,8 @@ const ReportAPI = {
                     final_status: originalStatus || 'A',
                     approved_by: null,
                     approved_at: null,
-                    lop_reason: null
+                    lop_reason: null,
+                    lop_request_id: null
                 })
                 .eq('id', attendanceId)
                 .eq('client_id', AUTH.getClientId());

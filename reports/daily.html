@@ -668,7 +668,7 @@
                                    !record.isFriday &&
                                    !dateFrozen;
 
-                const wasApproved = record.approved_by && record.final_status === 'P';
+                const wasApproved = record.approved_by && (record.final_status === 'P' || record.final_status === 'H');
 
                 let checkboxHtml = '';
                 if (isAdmin && canApprove) {
@@ -686,7 +686,7 @@
                 } else if (wasApproved) {
                     lopActionHtml = `
                         <div class="lop-inline">
-                            <span class="badge status-P">${record.auto_status} → P</span>
+                            <span class="badge status-${record.final_status}">${record.auto_status} → ${record.final_status}</span>
                             <button class="reason-btn" onclick="viewReason('${recordKey}')" title="View reason">💬</button>
                             <span style="font-size: 11px; color: #38a169; white-space: nowrap;">by ${record.approved_by}</span>
                             ${isAdmin && !dateFrozen && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}

@@ -140,16 +140,23 @@ const LOPAPI = {
 
             if (error) throw error;
 
-            // Update daily attendance final_status
-            await supabaseClient
+            // Update daily attendance — upsert so it works even if no attendance row exists yet
+            const { error: daError } = await supabaseClient
                 .from('daily_attendance')
-                .update({
+                .upsert({
+                    client_id: AUTH.getClientId(),
+                    labor_id: current.labor_id,
+                    department_id: current.department_id,
+                    date: current.date,
+                    auto_status: current.auto_status,
                     final_status: finalStatus,
-                    lop_request_id: requestId
-                })
-                .eq('client_id', AUTH.getClientId())
-                .eq('labor_id', current.labor_id)
-                .eq('date', current.date);
+                    lop_request_id: requestId,
+                    approved_by: session.name,
+                    approved_at: new Date().toISOString(),
+                    lop_reason: current.remarks,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'labor_id,date' });
+            if (daError) console.warn('[LOPAPI] daily_attendance update failed:', daError);
 
             await AUTH.logAction('APPROVE', 'lop_requests', requestId, current, data);
 
