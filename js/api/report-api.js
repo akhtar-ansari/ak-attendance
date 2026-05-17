@@ -102,6 +102,7 @@ const ReportAPI = {
             const settingsQuery = supabaseClient
                 .from('settings')
                 .select('key, value')
+                .eq('client_id', clientId)
                 .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
 
             const [
@@ -242,8 +243,11 @@ const ReportAPI = {
                         const autoStatus = (firstLogin && lastLogout)
                             ? this.determineStatus(this.calculateHours(firstLogin, lastLogout), minHours)
                             : (isNH ? 'NH' : (isFriday ? 'F' : 'A'));
-                        // Keep final_status only when manually overridden (LOP or manual approval)
-                        const manualOverride = record && ['LP','LH','LA'].includes(record.final_status);
+                        // Keep final_status when manually overridden: legacy LP/LH/LA codes OR admin LOP approval
+                        const manualOverride = record && (
+                            ['LP','LH','LA'].includes(record.final_status) ||
+                            record.approved_by
+                        );
                         const effectiveStatus = sandwichStatus || (manualOverride ? record.final_status : autoStatus);
                         result.push({
                             ...(record || {}),
