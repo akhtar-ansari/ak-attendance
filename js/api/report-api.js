@@ -102,6 +102,7 @@ const ReportAPI = {
             const settingsQuery = supabaseClient
                 .from('settings')
                 .select('key, value')
+                .eq('client_id', clientId)
                 .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
 
             const [
@@ -242,8 +243,11 @@ const ReportAPI = {
                         const autoStatus = (firstLogin && lastLogout)
                             ? this.determineStatus(this.calculateHours(firstLogin, lastLogout), minHours)
                             : (isNH ? 'NH' : (isFriday ? 'F' : 'A'));
-                        // Keep final_status only when manually overridden (LOP or manual approval)
-                        const manualOverride = record && ['LP','LH','LA'].includes(record.final_status);
+                        // Keep final_status when manually overridden: legacy LP/LH/LA codes OR admin LOP approval
+                        const manualOverride = record && (
+                            ['LP','LH','LA'].includes(record.final_status) ||
+                            record.approved_by
+                        );
                         const effectiveStatus = sandwichStatus || (manualOverride ? record.final_status : autoStatus);
                         result.push({
                             ...(record || {}),
@@ -1037,7 +1041,7 @@ const ReportAPI = {
     // Bulk approve LOP (admin only)
     async bulkApproveLOP(attendanceIds, reason) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can bulk approve' };
             }
 
@@ -1065,7 +1069,7 @@ const ReportAPI = {
     // Undo LOP approval (admin only)
     async undoLOP(attendanceId, originalStatus) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can undo approval' };
             }
 
@@ -1075,7 +1079,8 @@ const ReportAPI = {
                     final_status: originalStatus || 'A',
                     approved_by: null,
                     approved_at: null,
-                    lop_reason: null
+                    lop_reason: null,
+                    lop_request_id: null
                 })
                 .eq('id', attendanceId)
                 .eq('client_id', AUTH.getClientId());
@@ -1122,7 +1127,7 @@ const ReportAPI = {
     // Freeze a date (admin only)
     async freezeDate(date) {
         try {
-            if (!AUTH.hasRole('admin')) {
+            if (!AUTH.hasRole(['admin', 'super_admin'])) {
                 return { success: false, error: 'Only admin can freeze attendance' };
             }
 
