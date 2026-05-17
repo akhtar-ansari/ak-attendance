@@ -179,6 +179,7 @@ const SyncManager = {
                     }
 
                     // Save punch to server
+                    const isNightShiftEnd = (correctedDate !== punch.date);
                     const { data, error } = await supabaseClient
                         .from('punch_records')
                         .insert({
@@ -191,7 +192,8 @@ const SyncManager = {
                             location_name: punch.locationName,
                             confidence: punch.confidence,
                             photo_url: photoUrl,
-                            client_id: punchClientId
+                            client_id: punchClientId,
+                            is_night_shift_end: isNightShiftEnd
                         })
                         .select()
                         .single();

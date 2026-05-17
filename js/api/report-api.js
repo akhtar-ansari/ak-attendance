@@ -79,7 +79,7 @@ const ReportAPI = {
 
             let punchQuery = supabaseClient
                 .from('punch_records')
-                .select('labor_id, date, time, location_name')
+                .select('labor_id, date, time, location_name, is_night_shift_end')
                 .eq('client_id', clientId)
                 .gte('date', fromDate)
                 .lte('date', toDate)
@@ -121,12 +121,24 @@ const ReportAPI = {
             (punches || []).forEach(p => {
                 const key = `${p.labor_id}_${p.date}`;
                 if (!punchLocationMap[key]) punchLocationMap[key] = p.location_name || '';
-                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: p.time, lastOut: p.time };
-                else {
-                    if (p.time < punchTimeMap[key].firstIn) punchTimeMap[key].firstIn = p.time;
-                    if (p.time > punchTimeMap[key].lastOut) punchTimeMap[key].lastOut = p.time;
+                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: null, lastOut: null, nightEnd: null };
+                if (p.is_night_shift_end) {
+                    if (!punchTimeMap[key].nightEnd || p.time > punchTimeMap[key].nightEnd)
+                        punchTimeMap[key].nightEnd = p.time;
+                } else {
+                    if (!punchTimeMap[key].firstIn || p.time < punchTimeMap[key].firstIn)
+                        punchTimeMap[key].firstIn = p.time;
+                    if (!punchTimeMap[key].lastOut || p.time > punchTimeMap[key].lastOut)
+                        punchTimeMap[key].lastOut = p.time;
                 }
             });
+            for (const entry of Object.values(punchTimeMap)) {
+                if (entry.nightEnd) {
+                    entry.lastOut = entry.nightEnd;
+                    if (!entry.firstIn) entry.firstIn = entry.nightEnd;
+                }
+                if (!entry.firstIn) entry.firstIn = entry.lastOut;
+            }
 
             const deptMap = {};
             const deptMinHoursMap = {};
