@@ -109,6 +109,22 @@ const SyncManager = {
 
             console.log(`[SyncManager] Syncing ${unsyncedPunches.length} punches...`);
 
+            // Fetch night shift settings once for this client
+            let nightStartMins = 20 * 60;
+            let nightEndMins   = 6 * 60 + 30;
+            const { data: nsSet } = await supabaseClient
+                .from('settings')
+                .select('key, value')
+                .eq('client_id', clientId)
+                .in('key', ['night_shift_start', 'night_shift_end']);
+            (nsSet || []).forEach(s => {
+                const [h, m] = (s.value || '').split(':').map(Number);
+                if (!isNaN(h)) {
+                    if (s.key === 'night_shift_start') nightStartMins = h * 60 + m;
+                    if (s.key === 'night_shift_end')   nightEndMins   = h * 60 + m;
+                }
+            });
+
             // Track which labor+date combinations need recalculation
             const recalculateSet = new Set();
 
@@ -126,15 +142,51 @@ const SyncManager = {
                     // Use client_id from punch data (saved during offline punch) or fall back to current session
                     const punchClientId = punch.clientId || clientId;
 
+                    // Apply night shift date correction
+                    let correctedDate = punch.date;
+                    const [pph, ppm] = punch.time.split(':').map(Number);
+                    if ((pph * 60 + ppm) <= nightEndMins) {
+                        const prev = new Date(punch.date);
+                        prev.setDate(prev.getDate() - 1);
+                        const prevStr = prev.toISOString().split('T')[0];
+                        const { data: prevPunches } = await supabaseClient
+                            .from('punch_records')
+                            .select('time')
+                            .eq('client_id', punchClientId)
+                            .eq('labor_id', punch.laborId)
+                            .eq('date', prevStr);
+                        const hadNight = (prevPunches || []).some(p => {
+                            const [hh, mm] = p.time.split(':').map(Number);
+                            return (hh * 60 + mm) >= nightStartMins;
+                        });
+                        if (hadNight) correctedDate = prevStr;
+                    }
+
+                    // Check for duplicate before inserting
+                    const { data: existing } = await supabaseClient
+                        .from('punch_records')
+                        .select('id')
+                        .eq('client_id', punchClientId)
+                        .eq('labor_id', punch.laborId)
+                        .eq('date', correctedDate)
+                        .eq('time', punch.time)
+                        .maybeSingle();
+
+                    if (existing) {
+                        await OfflineStorage.markPunchSynced(punch.id);
+                        console.log(`[SyncManager] Punch ${punch.id} already in DB, skipping duplicate`);
+                        continue;
+                    }
+
                     // Save punch to server
                     const { data, error } = await supabaseClient
                         .from('punch_records')
                         .insert({
                             labor_id: punch.laborId,
                             department_id: punch.departmentId,
-                            date: punch.date,
+                            date: correctedDate,
                             time: punch.time,
-                            type: 'punch',
+                            type: punch.type,
                             location_id: punch.locationId,
                             location_name: punch.locationName,
                             confidence: punch.confidence,
@@ -148,16 +200,19 @@ const SyncManager = {
 
                     await OfflineStorage.markPunchSynced(punch.id);
                     console.log(`[SyncManager] Punch ${punch.id} synced`);
-                    
-                    // Track for recalculation
-                    recalculateSet.add(`${punch.laborId}|${punch.date}`);
+
+                    // Track for recalculation (use corrected date)
+                    recalculateSet.add(`${punch.laborId}|${correctedDate}`);
                     
                     // Update last_sync_at for this laborer
-                    await supabaseClient
+                    const { error: syncAtError } = await supabaseClient
                         .from('laborers')
                         .update({ last_sync_at: new Date().toISOString() })
                         .eq('labor_id', punch.laborId)
                         .eq('client_id', punchClientId);
+                    if (syncAtError) {
+                        console.warn(`[SyncManager] Could not update last_sync_at for ${punch.laborId}:`, syncAtError.message);
+                    }
 
                 } catch (err) {
                     console.error(`[SyncManager] Failed to sync punch ${punch.id}:`, err);
@@ -227,20 +282,25 @@ const SyncManager = {
             if (firstLogin && lastLogout) {
                 const [lh, lm] = firstLogin.time.split(':').map(Number);
                 const [oh, om] = lastLogout.time.split(':').map(Number);
-                totalHours = ((oh * 60 + om) - (lh * 60 + lm)) / 60;
+                const inMins = lh * 60 + lm;
+                const outMins = oh * 60 + om;
+                const diffMins = outMins > inMins
+                    ? outMins - inMins
+                    : (inMins - outMins > 6 * 60 ? (24 * 60 - inMins) + outMins : 0);
+                totalHours = diffMins / 60;
 
                 // Get settings for thresholds
                 const { data: settings } = await supabaseClient
                     .from('settings')
-                    .select('setting_value')
+                    .select('key, value')
                     .eq('client_id', clientId)
-                    .in('setting_key', ['min_hours_present', 'min_hours_half_day']);
+                    .in('key', ['min_hours_present', 'min_hours_half_day']);
 
                 let minPresent = 10, minHalf = 4;
                 if (settings) {
                     settings.forEach(s => {
-                        if (s.setting_key === 'min_hours_present') minPresent = parseFloat(s.setting_value);
-                        if (s.setting_key === 'min_hours_half_day') minHalf = parseFloat(s.setting_value);
+                        if (s.key === 'min_hours_present') minPresent = parseFloat(s.value);
+                        if (s.key === 'min_hours_half_day') minHalf = parseFloat(s.value);
                     });
                 }
 

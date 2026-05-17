@@ -80,11 +80,14 @@ const UserAPI = {
                 return { success: false, error: 'Department is required for Admin and Supervisor' };
             }
 
+            const cleanUsername = user.username.toLowerCase().trim();
+            const hashedPassword = await AUTH.hashPassword(cleanUsername, user.password);
+
             const { data, error } = await supabaseClient
                 .from('users')
                 .insert({
-                    username: user.username.toLowerCase().trim(),
-                    password_hash: user.password,
+                    username: cleanUsername,
+                    password_hash: hashedPassword,
                     name: user.name.trim(),
                     role: user.role,
                     department_id: user.role === 'admin' ? null : user.departmentId,
@@ -134,7 +137,7 @@ const UserAPI = {
                 updateObj.department_id = updates.role === 'admin' ? null : updates.departmentId;
             }
             if (updates.status) updateObj.status = updates.status;
-            if (updates.password) updateObj.password_hash = updates.password;
+            if (updates.password) updateObj.password_hash = await AUTH.hashPassword(oldData.username, updates.password);
 
             const { data, error } = await supabaseClient
                 .from('users')
@@ -216,13 +219,24 @@ const UserAPI = {
                 .eq('id', session.userId)
                 .single();
 
-            if (user.password_hash !== currentPassword) {
+            // Support both hashed and plaintext during migration
+            let passwordMatch = false;
+            if (AUTH.isHashed(user.password_hash)) {
+                const hashedCurrent = await AUTH.hashPassword(session.username, currentPassword);
+                passwordMatch = hashedCurrent === user.password_hash;
+            } else {
+                passwordMatch = user.password_hash === currentPassword;
+            }
+
+            if (!passwordMatch) {
                 return { success: false, error: 'Current password is incorrect' };
             }
 
+            const hashedNew = await AUTH.hashPassword(session.username, newPassword);
+
             const { error } = await supabaseClient
                 .from('users')
-                .update({ password_hash: newPassword })
+                .update({ password_hash: hashedNew })
                 .eq('client_id', AUTH.getClientId())
                 .eq('id', session.userId);
 

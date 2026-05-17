@@ -211,7 +211,8 @@ const LaborAPI = {
             if (updates.lowConfidenceCount !== undefined) updateObj.low_confidence_count = updates.lowConfidenceCount;
             if (updates.lastLowConfidenceDate) updateObj.last_low_confidence_date = updates.lastLowConfidenceDate;
             if (updates.role !== undefined) updateObj.role = updates.role;
-if (updates.monthlySalary !== undefined) updateObj.monthly_salary = updates.monthlySalary;
+            if (updates.monthlySalary !== undefined) updateObj.monthly_salary = updates.monthlySalary;
+            if (updates.lastWorkingDate !== undefined) updateObj.last_working_date = updates.lastWorkingDate;
 
             const { data, error } = await supabaseClient
                 .from('laborers')

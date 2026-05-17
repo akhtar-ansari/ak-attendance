@@ -208,35 +208,47 @@ const PunchAPI = {
     // Save punch record
     async savePunch(punch) {
         try {
-            // Determine correct date (handle night shift cutoff at 6:30 AM)
+            // Determine correct date (handle night shift)
             let punchDate = punch.date;
-            const punchTime = punch.time;
-            const [hours, minutes] = punchTime.split(':').map(Number);
-            const timeInMinutes = hours * 60 + minutes;
-            const cutoffInMinutes = 6 * 60 + 30; // 6:30 AM
 
-            // If punch is before 6:30 AM, check for open login from previous day
-            if (timeInMinutes < cutoffInMinutes) {
+            // Fetch per-client night shift settings (defaults: start 20:00, end 06:30)
+            let nightStartMinutes = 20 * 60;
+            let nightEndMinutes   = 6 * 60 + 30;
+            const { data: nsSettings } = await supabaseClient
+                .from('settings')
+                .select('key, value')
+                .eq('client_id', AUTH.getClientId())
+                .in('key', ['night_shift_start', 'night_shift_end']);
+            (nsSettings || []).forEach(s => {
+                const [h, m] = (s.value || '').split(':').map(Number);
+                if (!isNaN(h)) {
+                    if (s.key === 'night_shift_start') nightStartMinutes = h * 60 + m;
+                    if (s.key === 'night_shift_end')   nightEndMinutes   = h * 60 + m;
+                }
+            });
+
+            // If punch is at or before night shift end, check if it belongs to previous night
+            const [hours, minutes] = punch.time.split(':').map(Number);
+            const timeInMinutes = hours * 60 + minutes;
+            if (timeInMinutes <= nightEndMinutes) {
                 const yesterday = new Date(punch.date);
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-                // Check if there's an unmatched login from yesterday
-                const { data: yesterdayPunches } = await supabaseClient
+                // Check if yesterday had any punch at or after night shift start
+                const { data: prevPunches } = await supabaseClient
                     .from('punch_records')
-                    .select('type')
+                    .select('time')
                     .eq('client_id', AUTH.getClientId())
                     .eq('labor_id', punch.laborId)
-                    .eq('date', yesterdayStr)
-                    .order('time', { ascending: false });
+                    .eq('date', yesterdayStr);
 
-                if (yesterdayPunches && yesterdayPunches.length > 0) {
-                    const lastPunch = yesterdayPunches[0];
-                    if (lastPunch.type === 'login' && punch.type === 'logout') {
-                        // Open login exists from yesterday AND this is logout - belongs to yesterday
-                        punchDate = yesterdayStr;
-                    }
-                }
+                const hadNightShiftPunch = (prevPunches || []).some(p => {
+                    const [hh, mm] = p.time.split(':').map(Number);
+                    return (hh * 60 + mm) >= nightStartMinutes;
+                });
+
+                if (hadNightShiftPunch) punchDate = yesterdayStr;
             }
 
             const { data, error } = await supabaseClient
@@ -246,7 +258,7 @@ const PunchAPI = {
                     department_id: punch.departmentId,
                     date: punchDate,
                     time: punch.time,
-                    type: 'punch',
+                    type: punch.type,
                     location_id: punch.locationId,
                     location_name: punch.locationName,
                     confidence: punch.confidence,
@@ -258,13 +270,13 @@ const PunchAPI = {
 
             if (error) throw error;
 
-            // Update daily attendance
-            await supabaseClient.rpc('update_daily_attendance', {
+            // Post-insert processing — failures here must NOT cause a false { success: false }
+            // because the punch record is already saved in the DB.
+            supabaseClient.rpc('update_daily_attendance', {
                 p_labor_id: punch.laborId,
                 p_date: punchDate
-            });
+            }).catch(e => console.warn('[PunchAPI] update_daily_attendance failed:', e));
 
-            // Auto-create draft LOP if hours < 10
             LOPAPI.autoCreateDraft(punch.laborId, punch.date, punch.departmentId).catch(e => {
                 console.log('Auto draft check:', e.message);
             });

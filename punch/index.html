@@ -9,8 +9,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: #000; overflow: hidden; height: 100vh; }
@@ -538,7 +536,6 @@
     <script src="../js/utils/sync-manager.js"></script>
     <script src="../js/api/labor-api.js"></script>
     <script src="../js/api/punch-api.js"></script>
-    <script src="../js/utils/push-notifications.js"></script>
 
     <script>
         // ============ MULTI-CLIENT SaaS SUPPORT ============
@@ -630,7 +627,11 @@ window.onload = async function() {
     console.log('[Init] Starting punch terminal...');
 
     // Step 1: Initialize offline storage FIRST
-    await OfflineStorage.init();
+    try {
+        await OfflineStorage.init();
+    } catch (e) {
+        console.warn('[Init] IndexedDB unavailable, continuing without offline storage:', e);
+    }
 
     // Step 2: Get client code from URL or localStorage
 let clientCode = getClientCodeFromURL();
@@ -1263,13 +1264,6 @@ localStorage.setItem('pwa_client_code', clientCode);
 
                 if (bestMatch) {
                     document.getElementById('verifyingMessage').textContent = `Welcome ${bestMatch.name}! Loading...`;
-                    
-                    try {
-                        await SyncManager.syncAll();
-                    } catch (e) {
-                        console.log('Sync skipped:', e);
-                    }
-                    
                     await showAttendance(bestMatch);
                 } else {
                     document.getElementById('verifyingMessage').textContent = 'Face not recognized. Try again...';
@@ -1313,34 +1307,32 @@ localStorage.setItem('pwa_client_code', clientCode);
                     listEl.innerHTML = `<div class="no-punches">No punches recorded today</div>`;
                     summaryEl.innerHTML = `
                         <div class="summary-hours">0h 0m</div>
-                        <div class="summary-status absent">Absent</div>
-                        <div class="summary-warning">⚠️ You have not punched today</div>
+                        <div class="summary-warning">⚠️ No punches recorded today</div>
                     `;
                 } else {
-                    listEl.innerHTML = punches.map(p => `
+                    listEl.innerHTML = punches.map(p => {
+                        const isIn = p.type === 'login';
+                        const label = isIn ? 'CHECK IN' : (p.type === 'logout' ? 'CHECK OUT' : 'PUNCH');
+                        const labelClass = isIn ? 'login' : 'logout';
+                        return `
                         <div class="punch-item">
-                            <div class="punch-type ${p.type}">
-                                ${p.type === 'login' ? '🟢' : '🔴'}
+                            <div class="punch-type ${labelClass}">
+                                ${isIn ? '🟢' : '🔴'}
                             </div>
                             <div class="punch-details">
-                                <div class="type-label ${p.type}">${p.type.toUpperCase()}</div>
+                                <div class="type-label ${labelClass}">${label}</div>
                                 <div class="time">${formatTime(p.time)}</div>
                                 <div class="location">📍 ${p.location_name || 'Unknown'}</div>
                             </div>
                             ${p.photo_url ? `<img class="punch-photo" src="${p.photo_url}" onclick="openFullscreenPhoto('${p.photo_url}')" alt="Punch Photo">` : ''}
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
 
-                    const { totalHours, status, warning } = calculateAttendance(punches);
-                    
-                    let statusClass = 'absent';
-                    if (status === 'Present') statusClass = 'present';
-                    else if (status === 'Half Day') statusClass = 'half-day';
+                    const { totalHours, stillIn } = calculateAttendance(punches);
 
                     summaryEl.innerHTML = `
                         <div class="summary-hours">${totalHours}</div>
-                        <div class="summary-status ${statusClass}">${status}</div>
-                        ${warning ? `<div class="summary-warning">⚠️ ${warning}</div>` : ''}
+                        ${stillIn ? `<div class="summary-warning">⚠️ Still logged in — punch out to stop the clock</div>` : ''}
                     `;
                 }
 
@@ -1372,45 +1364,31 @@ localStorage.setItem('pwa_client_code', clientCode);
         }
 
         function calculateAttendance(punches) {
-            let totalMinutes = 0;
+            if (!punches || punches.length === 0) return { totalHours: '0h 0m', stillIn: false };
 
-            const firstLogin = punches.find(p => p.type === 'login');
-            const lastLogout = [...punches].reverse().find(p => p.type === 'logout');
-
-            if (firstLogin && lastLogout) {
-                const [lh, lm] = firstLogin.time.split(':').map(Number);
-                const [oh, om] = lastLogout.time.split(':').map(Number);
-                const loginMinutes = lh * 60 + lm;
-                const logoutMinutes = oh * 60 + om;
-                totalMinutes = logoutMinutes - loginMinutes;
+            function toMinutes(t) {
+                if (!t) return null;
+                const parts = t.split(':').map(Number);
+                return parts[0] * 60 + parts[1];
             }
 
+            const startMinutes = toMinutes(punches[0].time);
+            let endMinutes;
+            let stillIn = false;
+
+            if (punches.length === 1) {
+                const now = new Date();
+                endMinutes = now.getHours() * 60 + now.getMinutes();
+                stillIn = true;
+            } else {
+                endMinutes = toMinutes(punches[punches.length - 1].time);
+            }
+
+            const totalMinutes = Math.max(0, endMinutes - startMinutes);
             const hours = Math.floor(totalMinutes / 60);
             const minutes = totalMinutes % 60;
-            const totalHours = `${hours}h ${minutes}m`;
 
-            const minPresent = parseInt(settings.min_hours_present || '10');
-            const minHalfDay = parseInt(settings.min_hours_half_day || '4');
-
-            let status = 'Absent';
-            let warning = '';
-
-            if (totalMinutes >= minPresent * 60) {
-                status = 'Present';
-            } else if (totalMinutes >= minHalfDay * 60) {
-                status = 'Half Day';
-                warning = `Need ${minPresent} hours for Present`;
-            } else if (totalMinutes > 0) {
-                status = 'Absent';
-                warning = `Need ${minHalfDay} hours for Half Day`;
-            }
-
-            const lastPunch = punches[punches.length - 1];
-            if (lastPunch && lastPunch.type === 'login') {
-                warning = 'You are still logged in. Remember to punch out!';
-            }
-
-            return { totalHours, status, warning };
+            return { totalHours: `${hours}h ${minutes}m`, stillIn };
         }
 
         function closeAttendanceModal() {

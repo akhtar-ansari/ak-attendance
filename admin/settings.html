@@ -127,6 +127,54 @@
             font-weight: 600;
         }
 
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 52px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #ccc;
+            border-radius: 28px;
+            transition: 0.3s;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: '';
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #667eea;
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        .setting-example {
+            font-size: 12px;
+            color: #888;
+            margin-top: 6px;
+            background: #f9f9f9;
+            border-left: 3px solid #667eea;
+            padding: 6px 10px;
+            border-radius: 0 6px 6px 0;
+        }
+
         /* Modal */
         .modal-overlay {
             display: none;
@@ -216,6 +264,53 @@
                         <div class="setting-desc">Maximum number of punch-in/out allowed per day (set 999 for testing)</div>
                     </div>
                     <input type="number" class="setting-input" id="max_punches_per_day" min="2" max="999">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Night Shift Start</div>
+                        <div class="setting-desc">Time when a night shift begins. A punch at or after this time confirms a night shift is in progress (e.g. 20:00).</div>
+                    </div>
+                    <input type="time" class="setting-input" id="night_shift_start">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Night Shift End</div>
+                        <div class="setting-desc">Time when a night shift ends. Punches at or before this time next morning are assigned to the previous night (e.g. 06:30).</div>
+                    </div>
+                    <input type="time" class="setting-input" id="night_shift_end">
+                </div>
+            </div>
+
+            <!-- Sandwich Rules -->
+            <div class="settings-section">
+                <h3>🥪 Sandwich Rules</h3>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Friday Sandwich Rule</div>
+                        <div class="setting-desc">If a laborer is absent both Thursday and Saturday, Friday is also marked Absent.</div>
+                        <div class="setting-example">
+                            Example: Laborer absent Thu + absent Sat → Friday = Absent.<br>
+                            Laborer absent Thu but present Sat → Friday stays as a paid day off (F).
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sandwich_rule_friday" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">National Holiday Sandwich Rule</div>
+                        <div class="setting-desc">If a laborer is absent on all working days surrounding a holiday block, those holidays are marked Absent.</div>
+                        <div class="setting-example">
+                            Example: Mon absent → Tue/Wed/Thu are NH (3-day Eid) → Sat absent → all 3 holidays + Friday = Absent.<br>
+                            If Mon is present → all 3 holidays stay paid (NH), Friday stays paid (F).
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sandwich_rule_nh" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
             </div>
 
@@ -355,15 +450,27 @@
                 SyncIndicator.show('Loading settings...');
                 const { data, error } = await supabaseClient
                     .from('settings')
-                    .select('*');
+                    .select('*')
+                    .eq('client_id', AUTH.getClientId());
                 if (error) throw error;
                 data.forEach(setting => {
-                    const input = document.getElementById(setting.key);
-                    if (input) {
-                        input.value = setting.value;
-                        originalSettings[setting.key] = setting.value;
+                    const el = document.getElementById(setting.key);
+                    if (!el) return;
+                    if (el.type === 'checkbox') {
+                        el.checked = setting.value !== 'false';
+                    } else {
+                        el.value = setting.value;
                     }
+                    originalSettings[setting.key] = setting.value;
                 });
+                // Apply defaults for settings not yet saved for this client
+                const settingDefaults = { night_shift_start: '20:00', night_shift_end: '06:30' };
+                for (const [key, def] of Object.entries(settingDefaults)) {
+                    if (!(key in originalSettings)) {
+                        const el = document.getElementById(key);
+                        if (el) el.value = def;
+                    }
+                }
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -379,8 +486,15 @@
                 'confidence_threshold',
                 'reenrollment_threshold',
                 'reenrollment_attempts',
-                'photo_retention_days'
+                'photo_retention_days',
+                'night_shift_start',
+                'night_shift_end'
             ];
+            const togglesToSave = [
+                'sandwich_rule_friday',
+                'sandwich_rule_nh'
+            ];
+            const clientId = AUTH.getClientId();
 
             const minPresent = parseFloat(document.getElementById('min_hours_present').value);
             const minHalf = parseFloat(document.getElementById('min_hours_half_day').value);
@@ -398,21 +512,49 @@
 
             try {
                 SyncIndicator.show('Saving settings...');
+
+                // Save all input settings (upsert per client)
                 for (const key of settingsToSave) {
                     const input = document.getElementById(key);
-                    if (input && input.value !== originalSettings[key]) {
+                    if (!input) continue;
+                    const newValue = input.value;
+                    if (newValue !== originalSettings[key]) {
                         const { error } = await supabaseClient
                             .from('settings')
-                            .update({ value: input.value, updated_at: new Date().toISOString() })
-                            .eq('key', key);
+                            .upsert(
+                                { client_id: clientId, key, value: newValue, updated_at: new Date().toISOString() },
+                                { onConflict: 'client_id,key' }
+                            );
                         if (error) throw error;
                         await AUTH.logAction('UPDATE_SETTING', 'settings', key,
                             { value: originalSettings[key] },
-                            { value: input.value }
+                            { value: newValue }
                         );
-                        originalSettings[key] = input.value;
+                        originalSettings[key] = newValue;
                     }
                 }
+
+                // Save toggle settings (upsert per client)
+                for (const key of togglesToSave) {
+                    const el = document.getElementById(key);
+                    if (!el) continue;
+                    const newValue = el.checked ? 'true' : 'false';
+                    if (newValue !== originalSettings[key]) {
+                        const { error } = await supabaseClient
+                            .from('settings')
+                            .upsert(
+                                { client_id: clientId, key, value: newValue, updated_at: new Date().toISOString() },
+                                { onConflict: 'client_id,key' }
+                            );
+                        if (error) throw error;
+                        await AUTH.logAction('UPDATE_SETTING', 'settings', key,
+                            { value: originalSettings[key] },
+                            { value: newValue }
+                        );
+                        originalSettings[key] = newValue;
+                    }
+                }
+
                 SyncIndicator.hide();
                 Toast.success('Settings saved successfully!');
             } catch (error) {

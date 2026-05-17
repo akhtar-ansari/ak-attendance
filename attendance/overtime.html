@@ -321,11 +321,12 @@
                                 <th>OT Amount (SAR)</th>
                                 <th>Notes</th>
                                 <th>Submitted By</th>
+                                <th id="historyActionHeader"></th>
                             </tr>
                         </thead>
                         <tbody id="historyTableBody">
                             <tr>
-                                <td colspan="9">
+                                <td colspan="10">
                                     <div class="empty-state">
                                         <div class="icon">📋</div>
                                         <h3>Select date range and click Load</h3>
@@ -359,6 +360,7 @@
         let otRows = [];         // All loaded rows
         let otRates = {};        // role -> rate_per_hour
         let selectedRows = new Set();
+        let existingOTMap = {};  // "laborId_date" -> total previously submitted OT hours
 
         // ─── Tab Switch ─────────────────────────────────────────
         function switchTab(tabName, el) {
@@ -366,6 +368,7 @@
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             el.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
+            if (tabName === 'history') loadHistory();
         }
 
         // ─── Init ───────────────────────────────────────────────
@@ -465,6 +468,20 @@
                     if (!locationMap[key]) locationMap[key] = p.location_name || '-';
                 });
 
+                // Fetch existing OT records for this date range
+                const { data: existingOT } = await supabaseClient
+                    .from('overtime_records')
+                    .select('labor_id, from_date, ot_hours')
+                    .eq('client_id', clientId)
+                    .gte('from_date', fromDate)
+                    .lte('from_date', toDate);
+
+                existingOTMap = {};
+                (existingOT || []).forEach(r => {
+                    const key = `${r.labor_id}_${r.from_date}`;
+                    existingOTMap[key] = (existingOTMap[key] || 0) + parseFloat(r.ot_hours);
+                });
+
                 // Build rows — one per laborer per day
                 otRows = result.data.map(rec => ({
                     date: rec.date,
@@ -547,6 +564,9 @@
                                 min="0" max="24" step="0.5" placeholder="0"
                                 onchange="onOTInput(${idx}, this)"
                                 oninput="onOTInput(${idx}, this)">
+                            ${existingOTMap[`${row.laborId}_${row.date}`]
+                                ? `<div style="font-size:11px;color:#b7791f;margin-top:3px;">Already submitted: ${existingOTMap[`${row.laborId}_${row.date}`]}h</div>`
+                                : ''}
                         </td>
                     </tr>`;
             }).join('');
@@ -685,20 +705,33 @@
             try {
                 SyncIndicator.show('Loading history...');
 
-                const { data, error } = await supabaseClient
+                const { data: records, error } = await supabaseClient
                     .from('overtime_records')
-                    .select(`
-                        *,
-                        laborers:labor_id (name, role)
-                    `)
+                    .select('*')
                     .eq('client_id', clientId)
-                    .gte('from_date', fromDate)
-                    .lte('to_date', toDate)
+                    .lte('from_date', toDate)
+                    .gte('to_date', fromDate)
                     .order('submitted_at', { ascending: false });
 
                 if (error) throw error;
 
-                renderHistory(data || []);
+                // Fetch laborer names separately (no FK join needed)
+                const laborIds = [...new Set((records || []).map(r => r.labor_id))];
+                let laborerMap = {};
+                if (laborIds.length > 0) {
+                    const { data: laborers } = await supabaseClient
+                        .from('laborers')
+                        .select('labor_id, name, role')
+                        .in('labor_id', laborIds);
+                    (laborers || []).forEach(l => { laborerMap[l.labor_id] = l; });
+                }
+
+                const enriched = (records || []).map(r => ({
+                    ...r,
+                    laborers: laborerMap[r.labor_id] || null
+                }));
+
+                renderHistory(enriched);
                 SyncIndicator.hide();
             } catch (error) {
                 SyncIndicator.hide();
@@ -708,9 +741,13 @@
 
         function renderHistory(records) {
             const tbody = document.getElementById('historyTableBody');
+            const isAdmin = session.role === 'admin';
+
+            // Show/hide action column header
+            document.getElementById('historyActionHeader').textContent = isAdmin ? 'Action' : '';
 
             if (!records.length) {
-                tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><h3>No OT records found</h3></div></td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="icon">📋</div><h3>No OT records found</h3></div></td></tr>`;
                 return;
             }
 
@@ -736,8 +773,28 @@
                         <td><strong style="color:#276749;">${parseFloat(r.ot_amount).toFixed(2)} SAR</strong></td>
                         <td>${r.notes || '-'}</td>
                         <td>${r.submitted_by || '-'}</td>
+                        <td>${isAdmin ? `<button onclick="deleteOTRecord('${r.id}')" style="background:#e53e3e;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Delete</button>` : ''}</td>
                     </tr>`;
             }).join('');
+        }
+
+        async function deleteOTRecord(id) {
+            if (session.role !== 'admin') return;
+            if (!confirm('Delete this OT record? This cannot be undone.')) return;
+
+            try {
+                const { error } = await supabaseClient
+                    .from('overtime_records')
+                    .delete()
+                    .eq('id', id)
+                    .eq('client_id', AUTH.getClientId());
+
+                if (error) throw error;
+                Toast.success('OT record deleted');
+                loadHistory();
+            } catch (e) {
+                Toast.error('Failed to delete: ' + e.message);
+            }
         }
 
         // ─── Initialize ──────────────────────────────────────────

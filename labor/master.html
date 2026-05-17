@@ -14,17 +14,57 @@
         .face-status.enrolled { color: #48bb78; }
         .face-status.not-enrolled { color: #e53e3e; }
         .face-status.needs-reenroll { color: #ed8936; }
-        .filter-bar {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            align-items: center;
+        /* Sticky table + frozen first column */
+        .table-container {
+            overflow: auto;
+            max-height: calc(100vh - 180px);
         }
-        .filter-bar select {
-            padding: 10px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
+        table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        table tbody td:first-child,
+        table thead th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        table tbody td:first-child {
+            background: white;
+        }
+        table thead th:first-child {
+            z-index: 3;
+        }
+        tbody tr:hover td:first-child {
+            background: #f7fafc;
+        }
+
+        /* Column filter row */
+        thead tr.filter-row th {
+            background: #f0f0f0;
+            padding: 6px 8px;
+            position: sticky;
+            top: 49px; /* height of first header row */
+            z-index: 2;
+        }
+        thead tr.filter-row th:first-child {
+            z-index: 3;
+        }
+        .col-filter {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #333;
+            background: white;
+            box-sizing: border-box;
+        }
+        .col-filter:focus {
+            border-color: #667eea;
+            outline: none;
         }
         /* Enrollment Link Styles */
         .pending-badge {
@@ -126,26 +166,6 @@
                     🔔 Pending <span class="pending-badge" id="pendingCount">0</span>
                 </button>
             </div>
-            <div class="filter-bar">
-                <select id="departmentFilter" onchange="applyFilters()">
-                    <option value="">All Departments</option>
-                </select>
-                <select id="statusFilter" onchange="applyFilters()">
-                    <option value="">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-                <select id="faceFilter" onchange="applyFilters()">
-                    <option value="">Face: All</option>
-                    <option value="enrolled">Enrolled</option>
-                    <option value="not-enrolled">Not Enrolled</option>
-                    <option value="needs-reenroll">Needs Re-enrollment</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="search-bar">
-            <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search by Name, Iqama, or Labor ID..." onkeyup="applyFilters()">
         </div>
 
         <div class="content">
@@ -163,6 +183,35 @@
                             <th>Face</th>
                             <th>Last Sync</th>
                             <th>Actions</th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="col-filter" id="filterId" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th><input type="text" class="col-filter" id="searchInput" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th><input type="text" class="col-filter" id="filterIqama" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th></th>
+                            <th><input type="text" class="col-filter" id="filterNationality" placeholder="Search..." onkeyup="applyFilters()"></th>
+                            <th>
+                                <select class="col-filter" id="departmentFilter" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                </select>
+                            </th>
+                            <th>
+                                <select class="col-filter" id="statusFilter" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </th>
+                            <th>
+                                <select class="col-filter" id="faceFilter" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="enrolled">Enrolled</option>
+                                    <option value="not-enrolled">Not Enrolled</option>
+                                    <option value="needs-reenroll">Re-enroll</option>
+                                </select>
+                            </th>
+                            <th></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="laborTable">
@@ -215,10 +264,15 @@
                     
                     <div class="form-group">
                         <label>Status</label>
-                        <select id="laborStatus" class="form-control">
+                        <select id="laborStatus" class="form-control" onchange="toggleLastWorkingDate()">
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
+                    </div>
+                    <div class="form-group" id="lastWorkingDateGroup" style="display:none;">
+                        <label>Last Working Date <span style="color:red;">*</span></label>
+                        <input type="date" id="laborLastWorkingDate" class="form-control">
+                        <div id="lastPunchInfo" style="font-size:12px; color:#718096; margin-top:4px;"></div>
                     </div>
                 </div>
             </div>
@@ -395,31 +449,27 @@
 
         // Apply filters
         function applyFilters() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
+            const searchId = (document.getElementById('filterId')?.value || '').toLowerCase();
+            const searchName = (document.getElementById('searchInput')?.value || '').toLowerCase();
+            const searchIqama = (document.getElementById('filterIqama')?.value || '').toLowerCase();
+            const searchNat = (document.getElementById('filterNationality')?.value || '').toLowerCase();
             const deptFilter = document.getElementById('departmentFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
             const faceFilter = document.getElementById('faceFilter').value;
 
             filteredLaborers = laborers.filter(labor => {
-                // Search filter
-                const matchSearch = !search || 
-                    labor.labor_id.toLowerCase().includes(search) ||
-                    labor.name.toLowerCase().includes(search) ||
-                    labor.iqama_number.includes(search);
-
-                // Department filter
+                const matchId = !searchId || labor.labor_id.toLowerCase().includes(searchId);
+                const matchName = !searchName || labor.name.toLowerCase().includes(searchName);
+                const matchIqama = !searchIqama || labor.iqama_number.includes(searchIqama);
+                const matchNat = !searchNat || (labor.nationality || '').toLowerCase().includes(searchNat);
                 const matchDept = !deptFilter || labor.department_id === deptFilter;
-
-                // Status filter
                 const matchStatus = !statusFilter || labor.status === statusFilter;
-
-                // Face filter
                 let matchFace = true;
                 if (faceFilter === 'enrolled') matchFace = labor.face_enrolled && !labor.needs_reenrollment;
                 else if (faceFilter === 'not-enrolled') matchFace = !labor.face_enrolled;
                 else if (faceFilter === 'needs-reenroll') matchFace = labor.needs_reenrollment;
 
-                return matchSearch && matchDept && matchStatus && matchFace;
+                return matchId && matchName && matchIqama && matchNat && matchDept && matchStatus && matchFace;
             });
 
             renderTable();
@@ -461,8 +511,8 @@
 
                 // Edit/Delete for admin/super_admin
                 if (session.role !== 'supervisor') {
-                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️</button> `;
-                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️</button>`;
+                    actions += `<button class="btn btn-sm btn-primary" onclick="editLabor('${labor.labor_id}')">✏️ Edit</button> `;
+                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteLabor('${labor.labor_id}')">🗑️ Delete</button>`;
                 }
 
                 // Sync status
@@ -526,6 +576,13 @@
             document.getElementById('laborModal').classList.add('active');
         }
 
+        // Toggle Last Working Date field visibility
+        function toggleLastWorkingDate() {
+            const status = document.getElementById('laborStatus').value;
+            document.getElementById('lastWorkingDateGroup').style.display =
+                status === 'inactive' ? 'block' : 'none';
+        }
+
         // Edit labor
         function editLabor(laborId) {
             const labor = laborers.find(l => l.labor_id === laborId);
@@ -535,11 +592,29 @@
             document.getElementById('editLaborId').value = labor.labor_id;
             document.getElementById('laborName').value = labor.name;
             document.getElementById('laborIqama').value = labor.iqama_number;
-            document.getElementById('laborIqama').disabled = true; // Can't change Iqama
+            document.getElementById('laborIqama').disabled = true;
             document.getElementById('laborDOJ').value = DateUtils.formatForInput(labor.date_of_joining);
             document.getElementById('laborNationality').value = labor.nationality;
             document.getElementById('laborDepartment').value = labor.department_id;
             document.getElementById('laborStatus').value = labor.status;
+            document.getElementById('laborLastWorkingDate').value =
+                labor.last_working_date ? DateUtils.formatForInput(labor.last_working_date) : '';
+            document.getElementById('lastPunchInfo').textContent = '';
+            toggleLastWorkingDate();
+
+            // Show last punch hint asynchronously
+            supabaseClient.from('punch_records')
+                .select('date')
+                .eq('client_id', AUTH.getClientId())
+                .eq('labor_id', labor.labor_id)
+                .order('date', { ascending: false })
+                .limit(1)
+                .then(({ data }) => {
+                    if (data && data[0]) {
+                        document.getElementById('lastPunchInfo').textContent =
+                            `Last punch recorded: ${DateUtils.formatDate(data[0].date)}`;
+                    }
+                });
 
             document.getElementById('laborModal').classList.add('active');
         }
@@ -558,11 +633,42 @@
             const nationality = document.getElementById('laborNationality').value.trim();
             const departmentId = document.getElementById('laborDepartment').value;
             const status = document.getElementById('laborStatus').value;
+            const lastWorkingDate = document.getElementById('laborLastWorkingDate').value || null;
 
-            // Validation
             if (!name || !iqamaNumber || !dateOfJoining || !nationality || !departmentId) {
                 Toast.error('Please fill all required fields');
                 return;
+            }
+
+            // Require last working date when marking inactive
+            if (status === 'inactive' && !lastWorkingDate) {
+                Toast.error('Please enter a Last Working Date before marking as inactive');
+                document.getElementById('laborLastWorkingDate').focus();
+                return;
+            }
+
+            // Validate last working date is not before last punch date
+            if (status === 'inactive' && lastWorkingDate && editLaborId) {
+                try {
+                    const { data: lastPunch } = await supabaseClient
+                        .from('punch_records')
+                        .select('date')
+                        .eq('client_id', AUTH.getClientId())
+                        .eq('labor_id', editLaborId)
+                        .order('date', { ascending: false })
+                        .limit(1);
+
+                    if (lastPunch && lastPunch[0] && lastWorkingDate < lastPunch[0].date) {
+                        Toast.error(
+                            `Last working date cannot be before the last recorded punch (${DateUtils.formatDate(lastPunch[0].date)}). ` +
+                            `Please enter a date on or after ${DateUtils.formatDate(lastPunch[0].date)}.`
+                        );
+                        return;
+                    }
+                } catch (e) {
+                    // Non-blocking — skip validation if query fails
+                    console.warn('Could not validate last punch date:', e);
+                }
             }
 
             try {
@@ -575,7 +681,8 @@
                         dateOfJoining,
                         nationality,
                         departmentId,
-                        status
+                        status,
+                        lastWorkingDate: status === 'inactive' ? lastWorkingDate : null
                     });
                 } else {
                     result = await LaborAPI.create({

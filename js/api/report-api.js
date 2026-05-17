@@ -1,4 +1,4 @@
-// AK Attendance - Report API v6 (Friday cross-month fix + LOP H→P fix + salary fix)
+// AK Attendance - Report API v7 (sandwich rule block fix + cross-month + per-client toggles)
 const ReportAPI = {
     // Get daily attendance summary (original - only punched laborers)
     async getDailyAttendance(fromDate, toDate, departmentId = null) {
@@ -59,19 +59,23 @@ const ReportAPI = {
             if (laborError) throw laborError;
             if (laborers?.length === 2000) console.warn('Complete attendance laborers hit 2000 record limit');
 
+            // Fetch ±1 day buffer for sandwich rule boundary lookups
+            const bufferFrom = new Date(fromDate);
+            bufferFrom.setDate(bufferFrom.getDate() - 1);
+            const bufferTo = new Date(toDate);
+            bufferTo.setDate(bufferTo.getDate() + 1);
+            const pad = n => String(n).padStart(2, '0');
+            const bufferFromStr = `${bufferFrom.getFullYear()}-${pad(bufferFrom.getMonth()+1)}-${pad(bufferFrom.getDate())}`;
+            const bufferToStr = `${bufferTo.getFullYear()}-${pad(bufferTo.getMonth()+1)}-${pad(bufferTo.getDate())}`;
+
+            // Run all remaining queries in parallel to minimise latency
             let attendanceQuery = supabaseClient
                 .from('daily_attendance')
                 .select('*')
                 .eq('client_id', clientId)
-                .gte('date', fromDate)
-                .lte('date', toDate);
-
-            if (departmentFilter) {
-                attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
-            }
-
-            const { data: attendance, error: attError } = await attendanceQuery;
-            if (attError) throw attError;
+                .gte('date', bufferFromStr)
+                .lte('date', bufferToStr);
+            if (departmentFilter) attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
 
             let punchQuery = supabaseClient
                 .from('punch_records')
@@ -80,29 +84,63 @@ const ReportAPI = {
                 .gte('date', fromDate)
                 .lte('date', toDate)
                 .order('time', { ascending: true });
+            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
 
-            if (departmentFilter) {
-                punchQuery = punchQuery.eq('department_id', departmentFilter);
-            }
+            const deptQuery = supabaseClient
+                .from('departments')
+                .select('id, name, min_hours_full_day')
+                .eq('client_id', clientId);
 
-            const { data: punches, error: punchError } = await punchQuery;
+            const holidayQuery = supabaseClient
+                .from('holidays')
+                .select('date, name')
+                .eq('client_id', clientId)
+                .eq('is_active', true)
+                .gte('date', bufferFromStr)
+                .lte('date', bufferToStr);
+
+            const settingsQuery = supabaseClient
+                .from('settings')
+                .select('key, value')
+                .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
+
+            const [
+                { data: attendance, error: attError },
+                { data: punches, error: punchError },
+                { data: departments },
+                { data: holidaysData },
+                { data: settingsData }
+            ] = await Promise.all([attendanceQuery, punchQuery, deptQuery, holidayQuery, settingsQuery]);
+
+            if (attError) throw attError;
             if (punchError) throw punchError;
 
             const punchLocationMap = {};
+            const punchTimeMap = {};
             (punches || []).forEach(p => {
                 const key = `${p.labor_id}_${p.date}`;
-                if (!punchLocationMap[key]) {
-                    punchLocationMap[key] = p.location_name || '';
+                if (!punchLocationMap[key]) punchLocationMap[key] = p.location_name || '';
+                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: p.time, lastOut: p.time };
+                else {
+                    if (p.time < punchTimeMap[key].firstIn) punchTimeMap[key].firstIn = p.time;
+                    if (p.time > punchTimeMap[key].lastOut) punchTimeMap[key].lastOut = p.time;
                 }
             });
 
-            const { data: departments } = await supabaseClient
-                .from('departments')
-                .select('id, name')
-                .eq('client_id', clientId);
-
             const deptMap = {};
-            (departments || []).forEach(d => deptMap[d.id] = d.name);
+            const deptMinHoursMap = {};
+            (departments || []).forEach(d => {
+                deptMap[d.id] = d.name;
+                deptMinHoursMap[d.id] = d.min_hours_full_day || '09:30';
+            });
+
+            const holidayMap = {};
+            (holidaysData || []).forEach(h => { holidayMap[h.date] = h.name; });
+
+            const settingsMap = {};
+            (settingsData || []).forEach(s => { settingsMap[s.key] = s.value; });
+            const fridaySandwichEnabled = settingsMap['sandwich_rule_friday'] !== 'false';
+            const nhSandwichEnabled = settingsMap['sandwich_rule_nh'] !== 'false';
 
             const attendanceMap = {};
             (attendance || []).forEach(a => {
@@ -115,29 +153,119 @@ const ReportAPI = {
             const endDate = new Date(toDate);
 
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                const dateStr = d.toISOString().split('T')[0];
+                const dateStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
                 const dayOfWeek = d.getDay();
+                const isFriday = dayOfWeek === 5;
+                const isNH = !!holidayMap[dateStr];
 
                 for (const labor of laborers) {
                     const key = `${labor.labor_id}_${dateStr}`;
                     const record = attendanceMap[key];
+                    const minHours = deptMinHoursMap[labor.department_id] || '09:30';
 
                     if (labor.date_of_joining && new Date(labor.date_of_joining) > d) {
                         continue;
                     }
 
-                    if (record) {
+                    // Determine sandwich-corrected status for NH and Friday days
+                    let sandwichStatus = null;
+
+                    if (isNH && nhSandwichEnabled) {
+                        // Walk backward skipping all NHs and Fridays to find nearest real working day
+                        let prevPtr = new Date(d);
+                        prevPtr.setDate(prevPtr.getDate() - 1);
+                        let prevDateStr = null;
+                        while (prevPtr >= bufferFrom) {
+                            const ps = `${prevPtr.getFullYear()}-${pad(prevPtr.getMonth()+1)}-${pad(prevPtr.getDate())}`;
+                            if (prevPtr.getDay() !== 5 && !holidayMap[ps]) { prevDateStr = ps; break; }
+                            prevPtr.setDate(prevPtr.getDate() - 1);
+                        }
+                        let nextPtr = new Date(d);
+                        nextPtr.setDate(nextPtr.getDate() + 1);
+                        let nextDateStr = null;
+                        while (nextPtr <= bufferTo) {
+                            const ns = `${nextPtr.getFullYear()}-${pad(nextPtr.getMonth()+1)}-${pad(nextPtr.getDate())}`;
+                            if (nextPtr.getDay() !== 5 && !holidayMap[ns]) { nextDateStr = ns; break; }
+                            nextPtr.setDate(nextPtr.getDate() + 1);
+                        }
+
+                        const getStatus = (dateKey, rec) => {
+                            if (!dateKey) return 'P';
+                            const r = attendanceMap[`${labor.labor_id}_${dateKey}`];
+                            if (r && r.first_login && r.last_logout) return this.determineStatus(this.calculateHours(r.first_login, r.last_logout), minHours);
+                            if (r && r.final_status) return r.final_status;
+                            return 'A';
+                        };
+                        const prevStatus = getStatus(prevDateStr);
+                        const nextStatus = getStatus(nextDateStr);
+                        sandwichStatus = (prevStatus === 'A' && nextStatus === 'A') ? 'A' : 'NH';
+
+                    } else if (isFriday && fridaySandwichEnabled) {
+                        const thuDate = new Date(d);
+                        thuDate.setDate(thuDate.getDate() - 1);
+                        const satDate = new Date(d);
+                        satDate.setDate(satDate.getDate() + 1);
+                        const thuStr = `${thuDate.getFullYear()}-${pad(thuDate.getMonth()+1)}-${pad(thuDate.getDate())}`;
+                        const satStr = `${satDate.getFullYear()}-${pad(satDate.getMonth()+1)}-${pad(satDate.getDate())}`;
+
+                        let thuStatus;
+                        if (holidayMap[thuStr]) {
+                            thuStatus = 'P';
+                        } else {
+                            const tr = attendanceMap[`${labor.labor_id}_${thuStr}`];
+                            if (tr && tr.first_login && tr.last_logout) thuStatus = this.determineStatus(this.calculateHours(tr.first_login, tr.last_logout), minHours);
+                            else if (tr && tr.final_status) thuStatus = tr.final_status;
+                            else thuStatus = 'A';
+                        }
+
+                        let satStatus;
+                        if (holidayMap[satStr]) {
+                            satStatus = 'P';
+                        } else {
+                            const sr = attendanceMap[`${labor.labor_id}_${satStr}`];
+                            if (sr && sr.first_login && sr.last_logout) satStatus = this.determineStatus(this.calculateHours(sr.first_login, sr.last_logout), minHours);
+                            else if (sr && sr.final_status) satStatus = sr.final_status;
+                            else satStatus = 'A';
+                        }
+
+                        sandwichStatus = (thuStatus === 'A' && satStatus === 'A') ? 'A' : 'F';
+                    }
+
+                    const punchTimes = punchTimeMap[key];
+                    if (record || punchTimes) {
+                        // Always derive login/logout from actual punch records if available
+                        const firstLogin = punchTimes ? punchTimes.firstIn : (record?.first_login || null);
+                        const lastLogout = punchTimes ? punchTimes.lastOut : (record?.last_logout || null);
+                        const totalHours = (firstLogin && lastLogout)
+                            ? this.calculateHours(firstLogin, lastLogout) / 60
+                            : (record?.total_hours || null);
+                        const autoStatus = (firstLogin && lastLogout)
+                            ? this.determineStatus(this.calculateHours(firstLogin, lastLogout), minHours)
+                            : (isNH ? 'NH' : (isFriday ? 'F' : 'A'));
+                        // Keep final_status only when manually overridden (LOP or manual approval)
+                        const manualOverride = record && ['LP','LH','LA'].includes(record.final_status);
+                        const effectiveStatus = sandwichStatus || (manualOverride ? record.final_status : autoStatus);
                         result.push({
-                            ...record,
+                            ...(record || {}),
+                            labor_id: labor.labor_id,
+                            department_id: labor.department_id,
+                            date: dateStr,
+                            first_login: firstLogin,
+                            last_logout: lastLogout,
+                            total_hours: totalHours,
+                            auto_status: autoStatus,
+                            final_status: effectiveStatus,
                             laborName: labor.name,
                             role: labor.role || 'Labor',
                             iqamaNumber: labor.iqama_number,
                             departmentName: deptMap[labor.department_id] || '-',
                             punchLocation: punchLocationMap[key] || '',
                             hasRecord: true,
-                            isFriday: dayOfWeek === 5
+                            isFriday
                         });
                     } else {
+                        const autoStatus = isNH ? 'NH' : (isFriday ? 'F' : 'A');
+                        const effectiveStatus = sandwichStatus || autoStatus;
                         result.push({
                             id: null,
                             labor_id: labor.labor_id,
@@ -146,8 +274,8 @@ const ReportAPI = {
                             first_login: null,
                             last_logout: null,
                             total_hours: null,
-                            auto_status: dayOfWeek === 5 ? 'F' : 'A',
-                            final_status: dayOfWeek === 5 ? 'F' : 'A',
+                            auto_status: autoStatus,
+                            final_status: effectiveStatus,
                             approved_by: null,
                             approved_at: null,
                             lop_reason: null,
@@ -158,7 +286,7 @@ const ReportAPI = {
                             departmentName: deptMap[labor.department_id] || '-',
                             punchLocation: '',
                             hasRecord: false,
-                            isFriday: dayOfWeek === 5
+                            isFriday
                         });
                     }
                 }
@@ -181,7 +309,7 @@ const ReportAPI = {
     },
 
     // Create absent record and approve LOP (for laborers who didn't punch)
-    async createAbsentAndApprove(laborId, date, departmentId, reason) {
+    async createAbsentAndApprove(laborId, date, departmentId, reason, finalStatus = 'P') {
         try {
             const session = AUTH.getSession();
             const clientId = AUTH.getClientId();
@@ -198,7 +326,7 @@ const ReportAPI = {
                 const { error } = await supabaseClient
                     .from('daily_attendance')
                     .update({
-                        final_status: 'P',
+                        final_status: finalStatus,
                         approved_by: session.name,
                         approved_at: new Date().toISOString(),
                         lop_reason: reason
@@ -219,7 +347,7 @@ const ReportAPI = {
                     last_logout: null,
                     total_hours: 0,
                     auto_status: 'A',
-                    final_status: 'P',
+                    final_status: finalStatus,
                     approved_by: session.name,
                     approved_at: new Date().toISOString(),
                     lop_reason: reason,
@@ -435,14 +563,19 @@ const ReportAPI = {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     },
 
-    // Calculate hours between two time strings
+    // Calculate hours between two time strings (handles cross-midnight night shifts)
     calculateHours(firstIn, lastOut) {
         if (!firstIn || !lastOut) return 0;
         try {
-            const inMinutes = this.parseTimeToMinutes(firstIn);
+            const inMinutes  = this.parseTimeToMinutes(firstIn);
             const outMinutes = this.parseTimeToMinutes(lastOut);
-            if (outMinutes <= inMinutes) return 0;
-            return outMinutes - inMinutes;
+            if (outMinutes > inMinutes) return outMinutes - inMinutes;
+            // Cross-midnight: logout time is less than login (night shift spanning midnight)
+            // Guard: only treat as cross-midnight if the apparent "backwards" gap exceeds 6h
+            if (inMinutes - outMinutes > 6 * 60) {
+                return (24 * 60 - inMinutes) + outMinutes;
+            }
+            return 0;
         } catch {
             return 0;
         }
@@ -524,19 +657,29 @@ const ReportAPI = {
             const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
 
-            // Get holidays (active only)
+            // Get holidays — extend range ±1 day to match attendance buffer (cross-month blocks)
             const { data: holidaysData } = await supabaseClient
                 .from('holidays')
                 .select('date, name')
                 .eq('client_id', AUTH.getClientId())
                 .eq('is_active', true)
-                .gte('date', startDate)
-                .lte('date', endDate);
+                .gte('date', fetchFrom)
+                .lte('date', fetchTo);
 
             const holidayMap = {};
             (holidaysData || []).forEach(h => {
                 holidayMap[h.date] = h.name;
             });
+
+            // Load sandwich rule toggles — default ON if key not present
+            const { data: settingsData } = await supabaseClient
+                .from('settings')
+                .select('key, value')
+                .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
+            const settingsMap = {};
+            (settingsData || []).forEach(s => { settingsMap[s.key] = s.value; });
+            const fridaySandwichEnabled = settingsMap['sandwich_rule_friday'] !== 'false';
+            const nhSandwichEnabled = settingsMap['sandwich_rule_nh'] !== 'false';
 
             const attendanceMap = {};
             (attendance || []).forEach(a => {
@@ -585,54 +728,67 @@ const ReportAPI = {
                         workedMinutes = 0;
 
                     } else if (holidayMap[dateStr]) {
-                        // National Holiday sandwich rule
-                        let prevDay = day - 1;
-                        while (prevDay >= 1) {
-                            const prevDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`);
-                            if (prevDate.getDay() !== 5) break;
-                            prevDay--;
-                        }
-                        let nextDay = day + 1;
-                        while (nextDay <= lastDay) {
-                            const nextDate = new Date(`${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`);
-                            if (nextDate.getDay() !== 5) break;
-                            nextDay++;
-                        }
+                        if (nhSandwichEnabled) {
+                            // NH sandwich rule — treat entire consecutive NH+Friday block as one unit.
+                            // Skip backward over all NHs and Fridays to find the nearest real working day.
+                            // Cross-month: allowed to step into the ±1 buffer day.
+                            const pad = n => String(n).padStart(2, '0');
+                            const bufferPrev = new Date(year, month - 1, 0); // last day of prev month
 
-                        const prevDateStr = prevDay >= 1
-                            ? `${year}-${String(month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`
-                            : null;
-                        const nextDateStr = nextDay <= lastDay
-                            ? `${year}-${String(month).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`
-                            : null;
-
-                        let prevStatus = 'A';
-                        if (prevDateStr) {
-                            const prevKey = `${laborer.labor_id}_${prevDateStr}`;
-                            const prevRecord = attendanceMap[prevKey];
-                            if (prevRecord && prevRecord.firstIn && prevRecord.lastOut) {
-                                const prevMinutes = this.calculateHours(prevRecord.firstIn, prevRecord.lastOut);
-                                prevStatus = this.determineStatus(prevMinutes, minHours);
-                            } else if (prevRecord && prevRecord.status) {
-                                prevStatus = prevRecord.status;
+                            let prevPtr = new Date(year, month - 1, day - 1);
+                            let prevDateStr = null;
+                            while (prevPtr >= bufferPrev) {
+                                const ps = `${prevPtr.getFullYear()}-${pad(prevPtr.getMonth()+1)}-${pad(prevPtr.getDate())}`;
+                                if (prevPtr.getDay() !== 5 && !holidayMap[ps]) { prevDateStr = ps; break; }
+                                prevPtr.setDate(prevPtr.getDate() - 1);
                             }
-                        }
 
-                        let nextStatus = 'A';
-                        if (nextDateStr) {
-                            const nextKey = `${laborer.labor_id}_${nextDateStr}`;
-                            const nextRecord = attendanceMap[nextKey];
-                            if (nextRecord && nextRecord.firstIn && nextRecord.lastOut) {
-                                const nextMinutes = this.calculateHours(nextRecord.firstIn, nextRecord.lastOut);
-                                nextStatus = this.determineStatus(nextMinutes, minHours);
-                            } else if (nextRecord && nextRecord.status) {
-                                nextStatus = nextRecord.status;
+                            // Skip forward over all NHs and Fridays to find the nearest real working day.
+                            const bufferNext = new Date(year, month, 1); // first day of next month
+
+                            let nextPtr = new Date(year, month - 1, day + 1);
+                            let nextDateStr = null;
+                            while (nextPtr <= bufferNext) {
+                                const ns = `${nextPtr.getFullYear()}-${pad(nextPtr.getMonth()+1)}-${pad(nextPtr.getDate())}`;
+                                if (nextPtr.getDay() !== 5 && !holidayMap[ns]) { nextDateStr = ns; break; }
+                                nextPtr.setDate(nextPtr.getDate() + 1);
                             }
-                        }
 
-                        if (prevStatus === 'A' && nextStatus === 'A') {
-                            status = 'A';
-                            absentCount++;
+                            // No working day found before block → benefit of doubt = Present
+                            let prevStatus = 'P';
+                            if (prevDateStr) {
+                                const prevKey = `${laborer.labor_id}_${prevDateStr}`;
+                                const prevRecord = attendanceMap[prevKey];
+                                if (prevRecord && prevRecord.firstIn && prevRecord.lastOut) {
+                                    prevStatus = this.determineStatus(this.calculateHours(prevRecord.firstIn, prevRecord.lastOut), minHours);
+                                } else if (prevRecord && prevRecord.status) {
+                                    prevStatus = prevRecord.status;
+                                } else {
+                                    prevStatus = 'A';
+                                }
+                            }
+
+                            // No working day found after block → benefit of doubt = Present
+                            let nextStatus = 'P';
+                            if (nextDateStr) {
+                                const nextKey = `${laborer.labor_id}_${nextDateStr}`;
+                                const nextRecord = attendanceMap[nextKey];
+                                if (nextRecord && nextRecord.firstIn && nextRecord.lastOut) {
+                                    nextStatus = this.determineStatus(this.calculateHours(nextRecord.firstIn, nextRecord.lastOut), minHours);
+                                } else if (nextRecord && nextRecord.status) {
+                                    nextStatus = nextRecord.status;
+                                } else {
+                                    nextStatus = 'A';
+                                }
+                            }
+
+                            if (prevStatus === 'A' && nextStatus === 'A') {
+                                status = 'A';
+                                absentCount++;
+                            } else {
+                                status = 'NH';
+                                holidayCount++;
+                            }
                         } else {
                             status = 'NH';
                             holidayCount++;
@@ -642,37 +798,48 @@ const ReportAPI = {
                         workedMinutes = 0;
 
                     } else if (isFriday) {
-                        // FIX 1: Friday sandwich rule — cross-month boundary aware
-                        // Use JS Date arithmetic so day-1 and day+1 correctly roll into prev/next month
-                        const thuDate = new Date(year, month - 1, day - 1);
-                        const satDate = new Date(year, month - 1, day + 1);
-                        const thursdayStr = thuDate.toISOString().split('T')[0];
-                        const saturdayStr = satDate.toISOString().split('T')[0];
+                        if (fridaySandwichEnabled) {
+                            // Friday sandwich rule — cross-month boundary aware.
+                            // If Thursday or Saturday is itself an NH, treat it as Present (paid holiday ≠ absent).
+                            const pad = n => String(n).padStart(2, '0');
+                            const thuDate = new Date(year, month - 1, day - 1);
+                            const satDate = new Date(year, month - 1, day + 1);
+                            const thursdayStr = `${thuDate.getFullYear()}-${pad(thuDate.getMonth()+1)}-${pad(thuDate.getDate())}`;
+                            const saturdayStr = `${satDate.getFullYear()}-${pad(satDate.getMonth()+1)}-${pad(satDate.getDate())}`;
 
-                        const thursdayKey = `${laborer.labor_id}_${thursdayStr}`;
-                        const saturdayKey = `${laborer.labor_id}_${saturdayStr}`;
+                            let thursdayStatus;
+                            if (holidayMap[thursdayStr]) {
+                                thursdayStatus = 'P'; // NH neighbor = Present
+                            } else {
+                                thursdayStatus = 'A';
+                                const thursdayRecord = attendanceMap[`${laborer.labor_id}_${thursdayStr}`];
+                                if (thursdayRecord && thursdayRecord.firstIn && thursdayRecord.lastOut) {
+                                    thursdayStatus = this.determineStatus(this.calculateHours(thursdayRecord.firstIn, thursdayRecord.lastOut), minHours);
+                                } else if (thursdayRecord && thursdayRecord.status) {
+                                    thursdayStatus = thursdayRecord.status;
+                                }
+                            }
 
-                        let thursdayStatus = 'A';
-                        const thursdayRecord = attendanceMap[thursdayKey];
-                        if (thursdayRecord && thursdayRecord.firstIn && thursdayRecord.lastOut) {
-                            const thuMinutes = this.calculateHours(thursdayRecord.firstIn, thursdayRecord.lastOut);
-                            thursdayStatus = this.determineStatus(thuMinutes, minHours);
-                        } else if (thursdayRecord && thursdayRecord.status) {
-                            thursdayStatus = thursdayRecord.status;
-                        }
+                            let saturdayStatus;
+                            if (holidayMap[saturdayStr]) {
+                                saturdayStatus = 'P'; // NH neighbor = Present
+                            } else {
+                                saturdayStatus = 'A';
+                                const saturdayRecord = attendanceMap[`${laborer.labor_id}_${saturdayStr}`];
+                                if (saturdayRecord && saturdayRecord.firstIn && saturdayRecord.lastOut) {
+                                    saturdayStatus = this.determineStatus(this.calculateHours(saturdayRecord.firstIn, saturdayRecord.lastOut), minHours);
+                                } else if (saturdayRecord && saturdayRecord.status) {
+                                    saturdayStatus = saturdayRecord.status;
+                                }
+                            }
 
-                        let saturdayStatus = 'A';
-                        const saturdayRecord = attendanceMap[saturdayKey];
-                        if (saturdayRecord && saturdayRecord.firstIn && saturdayRecord.lastOut) {
-                            const satMinutes = this.calculateHours(saturdayRecord.firstIn, saturdayRecord.lastOut);
-                            saturdayStatus = this.determineStatus(satMinutes, minHours);
-                        } else if (saturdayRecord && saturdayRecord.status) {
-                            saturdayStatus = saturdayRecord.status;
-                        }
-
-                        if (thursdayStatus === 'A' && saturdayStatus === 'A') {
-                            status = 'A';
-                            absentCount++;
+                            if (thursdayStatus === 'A' && saturdayStatus === 'A') {
+                                status = 'A';
+                                absentCount++;
+                            } else {
+                                status = 'F';
+                                fridayCount++;
+                            }
                         } else {
                             status = 'F';
                             fridayCount++;
@@ -808,6 +975,7 @@ const ReportAPI = {
                 .from('daily_attendance')
                 .select('id', { count: 'exact', head: true })
                 .eq('client_id', AUTH.getClientId())
+                .eq('date', today)
                 .in('final_status', ['H', 'A'])
                 .is('approved_by', null);
 
@@ -839,18 +1007,18 @@ const ReportAPI = {
     },
 
     // Approve LOP (single) - works for both existing and new records
-    async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null) {
+    async approveLOP(attendanceId, reason, laborId = null, date = null, departmentId = null, finalStatus = 'P') {
         try {
             if (!attendanceId && laborId && date && departmentId) {
-                return await this.createAbsentAndApprove(laborId, date, departmentId, reason);
+                return await this.createAbsentAndApprove(laborId, date, departmentId, reason, finalStatus);
             }
 
             const session = AUTH.getSession();
-            
+
             const { error } = await supabaseClient
                 .from('daily_attendance')
                 .update({
-                    final_status: 'P',
+                    final_status: finalStatus,
                     approved_by: session.name,
                     approved_at: new Date().toISOString(),
                     lop_reason: reason

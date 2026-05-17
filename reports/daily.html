@@ -6,38 +6,78 @@
     <title>AK Attendance - Daily Report</title>
     <link rel="stylesheet" href="../css/main.css">
     <style>
-        .filters-card {
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
             background: #f7fafc;
-            padding: 20px;
+            padding: 8px 14px;
             border-radius: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        .summary-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .summary-card .value {
-            font-size: 28px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .summary-card .label {
+        .controls-bar label {
             font-size: 12px;
-            color: #666;
+            color: #555;
         }
-        .status-P { color: #22543d; background: #c6f6d5; }
-        .status-H { color: #975a16; background: #fefcbf; }
-        .status-A { color: #c53030; background: #fed7d7; }
-        .status-F { color: #718096; background: #e2e8f0; }
+        .controls-bar input[type="date"] {
+            width: 130px;
+            padding: 5px 8px;
+            font-size: 13px;
+        }
+        /* Compact summary strip */
+        .summary-strip {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .scard {
+            background: white;
+            border-radius: 8px;
+            padding: 6px 18px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            flex: 0 0 auto;
+        }
+        .sval {
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .slbl {
+            font-size: 14px;
+            color: #888;
+        }
+        /* Compact table rows */
+        #reportTable td {
+            padding: 4px 8px;
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        /* Filter inside column header */
+        thead th .col-filter {
+            display: block;
+            width: 100%;
+            margin-top: 4px;
+            font-weight: normal;
+            font-size: 11px;
+            padding: 2px 5px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            box-sizing: border-box;
+        }
+        thead th .col-filter::placeholder { color: rgba(255,255,255,0.6); }
+        thead th select.col-filter option { color: #333; background: white; }
+        .status-P  { color: #22543d; background: #c6f6d5; }
+        .status-H  { color: #975a16; background: #fefcbf; }
+        .status-A  { color: #c53030; background: #fed7d7; }
+        .status-F  { color: #44337a; background: #e9d8fd; }
+        .status-NH { color: #44337a; background: #e9d8fd; }
         .photo-btn {
             background: #4299e1;
             color: white;
@@ -187,51 +227,15 @@
         </div>
 
         <div class="content">
-            <!-- Filters -->
-            <div class="filters-card">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>From Date</label>
-                        <input type="date" id="fromDate" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>To Date</label>
-                        <input type="date" id="toDate" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>Department</label>
-                        <select id="departmentFilter" class="form-control">
-                            <option value="">All Departments</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Search by Labor ID, Iqama or Name</label>
-                        <input type="text" id="laborFilter" class="form-control" placeholder="Leave empty for all laborers">
-                    </div>
-                    <div class="form-group">
-                        <label>Status Filter</label>
-                        <select id="statusFilterDropdown" class="form-control">
-                            <option value="">All Records</option>
-                            <option value="present">Present Only</option>
-                            <option value="absent">Absent Only</option>
-                            <option value="halfday">Half Day Only</option>
-                            <option value="no-punch">No Punch (Absent)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>LOP Status</label>
-                        <select id="lopFilter" class="form-control">
-                            <option value="">All Records</option>
-                            <option value="pending">Pending Approval</option>
-                            <option value="approved">Approved</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="action-buttons" style="margin-top: 15px;">
-                    <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate Report</button>
-                    <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
-                    <button type="button" class="freeze-btn" id="freezeBtn" onclick="freezeSelectedDate()" style="display: none;">🔒 Freeze Day</button>
-                </div>
+            <!-- Controls Bar -->
+            <div class="controls-bar">
+                <label>From</label>
+                <input type="date" id="fromDate" class="form-control">
+                <label>To</label>
+                <input type="date" id="toDate" class="form-control">
+                <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate</button>
+                <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
+                <button type="button" class="freeze-btn" id="freezeBtn" onclick="freezeSelectedDate()" style="display: none;">🔒 Freeze Day</button>
             </div>
 
             <!-- Frozen Banner -->
@@ -241,32 +245,14 @@
                 <span id="frozenByInfo" style="margin-left: auto; font-size: 12px;"></span>
             </div>
 
-            <!-- Summary -->
-            <div class="summary-grid" id="summarySection" style="display: none;">
-                <div class="summary-card">
-                    <div class="value" id="totalRecords" style="color: #667eea;">0</div>
-                    <div class="label">Total Records</div>
-                </div>
-                <div class="summary-card">
-                    <div class="value" id="presentCount" style="color: #48bb78;">0</div>
-                    <div class="label">Present</div>
-                </div>
-                <div class="summary-card">
-                    <div class="value" id="halfDayCount" style="color: #ed8936;">0</div>
-                    <div class="label">Half Day</div>
-                </div>
-                <div class="summary-card">
-                    <div class="value" id="absentCount" style="color: #e53e3e;">0</div>
-                    <div class="label">Absent</div>
-                </div>
-                <div class="summary-card">
-                    <div class="value" id="noPunchCount" style="color: #9b2c2c;">0</div>
-                    <div class="label">No Punch</div>
-                </div>
-                <div class="summary-card">
-                    <div class="value" id="avgHours" style="color: #4299e1;">0</div>
-                    <div class="label">Avg Hours</div>
-                </div>
+            <!-- Summary Strip -->
+            <div class="summary-strip" id="summarySection" style="display: none;">
+                <div class="scard"><span class="sval" id="totalRecords" style="color:#667eea;">0</span><span class="slbl">Total</span></div>
+                <div class="scard"><span class="sval" id="presentCount" style="color:#48bb78;">0</span><span class="slbl">Present</span></div>
+                <div class="scard"><span class="sval" id="halfDayCount" style="color:#ed8936;">0</span><span class="slbl">Half Day</span></div>
+                <div class="scard"><span class="sval" id="absentCount" style="color:#e53e3e;">0</span><span class="slbl">Absent</span></div>
+                <div class="scard"><span class="sval" id="noPunchCount" style="color:#9b2c2c;">0</span><span class="slbl">No Punch</span></div>
+                <div class="scard"><span class="sval" id="avgHours" style="color:#4299e1;">0</span><span class="slbl">Avg Hrs</span></div>
             </div>
 
             <!-- Bulk Actions Bar -->
@@ -284,25 +270,68 @@
                             <th style="width: 40px;">
                                 <input type="checkbox" id="selectAll" class="lop-checkbox" onchange="toggleSelectAll()" title="Select All">
                             </th>
-                            <th>Date</th>
-                            <th>Labor ID</th>
-                            <th>Name</th>
-                            <th>Role</th>
-                            <th>Location</th>
+                            <th>Date<input type="text" id="cfDate" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Labor ID<input type="text" id="cfId" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Name<input type="text" id="cfName" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Department
+                                <select id="cfDept" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                </select>
+                            </th>
+                            <th>Role<input type="text" id="cfRole" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Location<input type="text" id="cfLocation" class="col-filter" placeholder="Filter…" oninput="applyColumnFilters()"></th>
+                            <th>Is Punch
+                                <select id="cfPunch" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
+                            </th>
                             <th>Login</th>
                             <th>Logout</th>
                             <th>Hours</th>
-                            <th>Auto</th>
-                            <th>Final</th>
-                            <th>LOP Action</th>
+                            <th>Auto
+                                <select id="cfAuto" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="P">P</option>
+                                    <option value="H">H</option>
+                                    <option value="A">A</option>
+                                    <option value="F">F</option>
+                                    <option value="NH">NH</option>
+                                </select>
+                            </th>
+                            <th>Final
+                                <select id="cfFinal" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="P">P</option>
+                                    <option value="H">H</option>
+                                    <option value="A">A</option>
+                                    <option value="F">F</option>
+                                    <option value="NH">NH</option>
+                                </select>
+                            </th>
+                            <th>LOP Action
+                                <select id="cfLOP" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="approved">Approved</option>
+                                </select>
+                            </th>
+                            <th>Freeze
+                                <select id="cfFreeze" class="col-filter" onchange="applyColumnFilters()">
+                                    <option value="">All</option>
+                                    <option value="frozen">Frozen</option>
+                                    <option value="open">Open</option>
+                                </select>
+                            </th>
                             <th>OT</th>
                             <th>Photos</th>
                         </tr>
                     </thead>
                     <tbody id="reportTable">
                         <tr>
-                            <td colspan="14" class="text-center p-20 text-muted">
-                                Select date range and click "Generate Report"
+                            <td colspan="17" class="text-center p-20 text-muted">
+                                Select date range and click "Generate"
                             </td>
                         </tr>
                     </tbody>
@@ -331,6 +360,19 @@
             </div>
             <div class="modal-body">
                 <div id="approveInfo" style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;"></div>
+                <div id="finalStatusGroup" style="margin-bottom: 15px; display: none;">
+                    <label style="font-weight: 600;">Mark Absent as <span style="color: red;">*</span></label>
+                    <div style="display: flex; gap: 25px; margin-top: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="finalStatus" value="P" checked>
+                            <span class="badge status-P" style="font-size: 14px; padding: 5px 12px;">Present (P)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="finalStatus" value="H">
+                            <span class="badge status-H" style="font-size: 14px; padding: 5px 12px;">Half Day (H)</span>
+                        </label>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>Reason / Remarks <span style="color: red;">*</span></label>
                     <textarea id="approveReason" class="form-control" rows="3" placeholder="Enter reason for LOP approval (mandatory)"></textarea>
@@ -402,7 +444,7 @@
 
         const session = AUTH.getSession();
         const isAdmin = session.role === 'admin';
-        
+
         let departments = [];
         let laborers = [];
         let reportData = [];
@@ -426,8 +468,8 @@
                 const deptResult = await DepartmentAPI.getActive();
                 if (deptResult.success) {
                     departments = deptResult.data;
-                    const deptSelect = document.getElementById('departmentFilter');
-                    deptSelect.innerHTML = '<option value="">All Departments</option>';
+                    const deptSelect = document.getElementById('cfDept');
+                    deptSelect.innerHTML = '<option value="">All</option>';
                     departments.forEach(dept => {
                         if (session.role === 'admin' || dept.id === session.departmentId) {
                             deptSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
@@ -492,10 +534,6 @@
         async function generateReport() {
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
-            const departmentId = document.getElementById('departmentFilter').value;
-            const laborSearch = document.getElementById('laborFilter').value.trim().toLowerCase();
-            const statusFilter = document.getElementById('statusFilterDropdown').value;
-            const lopFilter = document.getElementById('lopFilter').value;
 
             if (!fromDate || !toDate) {
                 Toast.error('Please select date range');
@@ -531,67 +569,23 @@
                 if (currentDateIsFrozen) {
                     const freezeInfo = frozenDates[fromDate];
                     document.getElementById('frozenBanner').style.display = 'flex';
-                    document.getElementById('frozenByInfo').textContent = 
+                    document.getElementById('frozenByInfo').textContent =
                         `Frozen by ${freezeInfo.frozen_by} on ${new Date(freezeInfo.frozen_at).toLocaleString()}`;
                 } else {
                     document.getElementById('frozenBanner').style.display = 'none';
                 }
 
-                // Load OT records alongside attendance
                 await loadOTRecords(fromDate, toDate);
 
-                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, departmentId);
+                const result = await ReportAPI.getCompleteAttendance(fromDate, toDate, '');
                 if (!result.success) throw new Error(result.error);
 
                 reportData = result.data;
-                filteredData = [...reportData];
+                document.getElementById('summarySection').style.display = 'flex';
 
-                if (laborSearch) {
-                    filteredData = filteredData.filter(r => {
-                        return r.labor_id.toLowerCase().includes(laborSearch) || 
-                               (r.iqamaNumber && r.iqamaNumber.toLowerCase().includes(laborSearch)) ||
-                               (r.laborName && r.laborName.toLowerCase().includes(laborSearch));
-                    });
-                }
-
-                if (statusFilter === 'present') {
-                    filteredData = filteredData.filter(r => r.final_status === 'P');
-                } else if (statusFilter === 'absent') {
-                    filteredData = filteredData.filter(r => r.final_status === 'A');
-                } else if (statusFilter === 'halfday') {
-                    filteredData = filteredData.filter(r => r.final_status === 'H');
-                } else if (statusFilter === 'no-punch') {
-                    filteredData = filteredData.filter(r => !r.hasRecord && r.final_status === 'A');
-                }
-
-                if (lopFilter === 'pending') {
-                    filteredData = filteredData.filter(r => 
-                        (r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by
-                    );
-                } else if (lopFilter === 'approved') {
-                    filteredData = filteredData.filter(r => r.approved_by);
-                }
-
-                const presentCount = filteredData.filter(r => r.final_status === 'P').length;
-                const halfDayCount = filteredData.filter(r => r.final_status === 'H').length;
-                const absentCount = filteredData.filter(r => r.final_status === 'A').length;
-                const noPunchCount = filteredData.filter(r => !r.hasRecord && r.final_status === 'A').length;
-                
-                const recordsWithHours = filteredData.filter(r => r.total_hours && parseFloat(r.total_hours) > 0);
-                const totalHours = recordsWithHours.reduce((sum, r) => sum + parseFloat(r.total_hours), 0);
-                const avgHours = recordsWithHours.length > 0 ? (totalHours / recordsWithHours.length).toFixed(1) : 0;
-
-                document.getElementById('totalRecords').textContent = filteredData.length;
-                document.getElementById('presentCount').textContent = presentCount;
-                document.getElementById('halfDayCount').textContent = halfDayCount;
-                document.getElementById('absentCount').textContent = absentCount;
-                document.getElementById('noPunchCount').textContent = noPunchCount;
-                document.getElementById('avgHours').textContent = avgHours;
-                document.getElementById('summarySection').style.display = 'grid';
-
-                renderTable();
+                applyColumnFilters();
                 SyncIndicator.hide();
-                Toast.success(`Found ${filteredData.length} records`);
+                Toast.success(`Found ${reportData.length} records`);
 
             } catch (error) {
                 SyncIndicator.hide();
@@ -600,11 +594,60 @@
             }
         }
 
+        function applyColumnFilters() {
+            const cfDate     = (document.getElementById('cfDate')?.value || '').toLowerCase();
+            const cfId       = (document.getElementById('cfId')?.value || '').toLowerCase();
+            const cfName     = (document.getElementById('cfName')?.value || '').toLowerCase();
+            const cfDept     = document.getElementById('cfDept')?.value || '';
+            const cfRole     = (document.getElementById('cfRole')?.value || '').toLowerCase();
+            const cfLocation = (document.getElementById('cfLocation')?.value || '').toLowerCase();
+            const cfPunch    = document.getElementById('cfPunch')?.value || '';
+            const cfAuto     = document.getElementById('cfAuto')?.value || '';
+            const cfFinal    = document.getElementById('cfFinal')?.value || '';
+            const cfLOP      = document.getElementById('cfLOP')?.value || '';
+            const cfFreeze   = document.getElementById('cfFreeze')?.value || '';
+
+            filteredData = reportData.filter(r => {
+                if (cfDate && !DateUtils.formatDate(r.date).toLowerCase().includes(cfDate)) return false;
+                if (cfId && !r.labor_id.toLowerCase().includes(cfId)) return false;
+                if (cfName && !(r.laborName || '').toLowerCase().includes(cfName)) return false;
+                if (cfDept && String(r.department_id) !== String(cfDept)) return false;
+                if (cfRole && !(r.role || '').toLowerCase().includes(cfRole)) return false;
+                if (cfLocation && !(r.punchLocation || '').toLowerCase().includes(cfLocation)) return false;
+                if (cfPunch === 'yes' && !r.hasRecord) return false;
+                if (cfPunch === 'no' && r.hasRecord) return false;
+                if (cfAuto && r.auto_status !== cfAuto) return false;
+                if (cfFinal && r.final_status !== cfFinal) return false;
+                if (cfLOP === 'pending' && !((r.auto_status === 'H' || r.auto_status === 'A') && !r.approved_by)) return false;
+                if (cfLOP === 'approved' && !r.approved_by) return false;
+                if (cfFreeze === 'frozen' && !isDateFrozen(r.date)) return false;
+                if (cfFreeze === 'open' && isDateFrozen(r.date)) return false;
+                return true;
+            });
+
+            const presentCount = filteredData.filter(r => r.final_status === 'P').length;
+            const halfDayCount = filteredData.filter(r => r.final_status === 'H').length;
+            const absentCount  = filteredData.filter(r => r.final_status === 'A').length;
+            const noPunchCount = filteredData.filter(r => !r.hasRecord && r.final_status === 'A').length;
+            const recordsWithHours = filteredData.filter(r => r.total_hours && parseFloat(r.total_hours) > 0);
+            const totalHrs = recordsWithHours.reduce((s, r) => s + parseFloat(r.total_hours), 0);
+            const avgHours = recordsWithHours.length > 0 ? (totalHrs / recordsWithHours.length).toFixed(1) : 0;
+
+            document.getElementById('totalRecords').textContent = filteredData.length;
+            document.getElementById('presentCount').textContent = presentCount;
+            document.getElementById('halfDayCount').textContent = halfDayCount;
+            document.getElementById('absentCount').textContent  = absentCount;
+            document.getElementById('noPunchCount').textContent = noPunchCount;
+            document.getElementById('avgHours').textContent     = avgHours;
+
+            renderTable();
+        }
+
         function renderTable() {
             const tbody = document.getElementById('reportTable');
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="14" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="17" class="text-center p-20 text-muted">No records found for selected criteria</td></tr>`;
                 return;
             }
 
@@ -612,21 +655,21 @@
                 const recordKey = getRecordKey(record);
                 const isNoPunch = !record.hasRecord;
                 const rowClass = isNoPunch ? 'no-punch-row' : '';
-                
+
                 const autoStatusClass = `status-${record.auto_status}`;
                 const autoStatusText = record.auto_status || 'A';
                 const finalStatusClass = `status-${record.final_status}`;
                 const finalStatusText = record.final_status || 'A';
 
                 const dateFrozen = isDateFrozen(record.date);
-                const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') && 
-                                   !record.approved_by && 
+                const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') &&
+                                   !record.approved_by &&
                                    isDateApprovable(record.date) &&
                                    !record.isFriday &&
                                    !dateFrozen;
-                
+
                 const wasApproved = record.approved_by && record.final_status === 'P';
-                
+
                 let checkboxHtml = '';
                 if (isAdmin && canApprove) {
                     const isChecked = selectedItems.has(recordKey) ? 'checked' : '';
@@ -657,31 +700,39 @@
                     lopActionHtml = '-';
                 }
 
-                // OT column
                 const otKey = `${record.labor_id}_${record.date}`;
                 const otHours = otMap[otKey];
                 const otDisplay = otHours ? `<span class="ot-badge">🕐 ${otHours}h</span>` : '-';
 
-                const photoBtn = record.hasRecord 
+                const photoBtn = record.hasRecord
                     ? `<button class="photo-btn" onclick="viewPhotos('${record.labor_id}', '${record.date}')">📷 View</button>`
                     : `<button class="photo-btn" disabled title="No punch">📷 -</button>`;
 
-                const noPunchBadge = isNoPunch ? '<span class="no-punch-badge">No Punch</span>' : '';
+                const isPunchBadge = record.hasRecord
+                    ? '<span class="badge" style="background:#c6f6d5;color:#22543d;">Yes</span>'
+                    : '<span class="badge" style="background:#fed7d7;color:#c53030;">No</span>';
+
+                const freezeCell = dateFrozen
+                    ? `<span class="frozen-badge">🔒 Frozen</span>`
+                    : `<span style="color:#a0aec0;font-size:12px;">—</span>`;
 
                 return `
                     <tr class="${rowClass}">
                         <td>${checkboxHtml}</td>
                         <td>${DateUtils.formatDate(record.date)}</td>
                         <td><strong>${record.labor_id}</strong></td>
-                        <td>${record.laborName || 'Unknown'} ${noPunchBadge}</td>
+                        <td>${record.laborName || 'Unknown'}</td>
+                        <td>${record.departmentName || '-'}</td>
                         <td>${record.role || 'Labor'}</td>
                         <td>${record.punchLocation || '-'}</td>
+                        <td>${isPunchBadge}</td>
                         <td>${DateUtils.formatTimeShort(record.first_login) || '-'}</td>
                         <td>${DateUtils.formatTimeShort(record.last_logout) || '-'}</td>
                         <td>${record.total_hours ? parseFloat(record.total_hours).toFixed(1) + 'h' : '-'}</td>
                         <td><span class="badge ${autoStatusClass}">${autoStatusText}</span></td>
                         <td><span class="badge ${finalStatusClass}">${finalStatusText}</span></td>
                         <td>${lopActionHtml}</td>
+                        <td>${freezeCell}</td>
                         <td>${otDisplay}</td>
                         <td>${photoBtn}</td>
                     </tr>
@@ -801,13 +852,16 @@
                 ? '<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ This labor did not punch. A new attendance record will be created.</div>'
                 : '';
 
+            const isAbsent = record.auto_status === 'A';
             document.getElementById('approveModalTitle').textContent = 'Approve LOP';
             document.getElementById('approveInfo').innerHTML = `
                 <div><strong>Labor:</strong> ${record.laborName || record.labor_id} (${record.labor_id})</div>
                 <div><strong>Date:</strong> ${DateUtils.formatDate(record.date)}</div>
-                <div><strong>Status:</strong> ${record.auto_status} → P</div>
+                <div><strong>Status:</strong> ${record.auto_status} → ${isAbsent ? 'P or H (your choice below)' : 'P'}</div>
                 ${noPunchNote}
             `;
+            document.getElementById('finalStatusGroup').style.display = isAbsent ? 'block' : 'none';
+            document.querySelector('input[name="finalStatus"][value="P"]').checked = true;
             document.getElementById('approveReason').value = '';
             document.getElementById('approveModal').classList.add('active');
         }
@@ -831,12 +885,18 @@
                 ? `<div style="color: #c53030; font-size: 12px; margin-top: 5px;">⚠️ ${noPunchCount} record(s) have no punch - new attendance records will be created.</div>`
                 : '';
 
+            const hasAbsentInBulk = [...selectedItems].some(key => {
+                const r = getRecordByKey(key);
+                return r && r.auto_status === 'A';
+            });
             document.getElementById('approveModalTitle').textContent = 'Bulk Approve LOP';
             document.getElementById('approveInfo').innerHTML = `
                 <div><strong>Selected Records:</strong> ${selectedItems.size}</div>
-                <div style="color: #718096; font-size: 13px; margin-top: 5px;">All selected Half Day / Absent records will be marked as Present</div>
+                <div style="color: #718096; font-size: 13px; margin-top: 5px;">Half Day records → Present. Absent records → your choice below.</div>
                 ${noPunchNote}
             `;
+            document.getElementById('finalStatusGroup').style.display = hasAbsentInBulk ? 'block' : 'none';
+            document.querySelector('input[name="finalStatus"][value="P"]').checked = true;
             document.getElementById('approveReason').value = '';
             document.getElementById('approveModal').classList.add('active');
         }
@@ -854,6 +914,8 @@
                 return;
             }
 
+            const chosenStatus = document.querySelector('input[name="finalStatus"]:checked')?.value || 'P';
+
             try {
                 SyncIndicator.show('Approving...');
 
@@ -865,11 +927,12 @@
                         const record = getRecordByKey(key);
                         if (!record) continue;
 
+                        const finalStatus = record.auto_status === 'A' ? chosenStatus : 'P';
                         let result;
                         if (record.id) {
-                            result = await ReportAPI.approveLOP(record.id, reason);
+                            result = await ReportAPI.approveLOP(record.id, reason, null, null, null, finalStatus);
                         } else {
-                            result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                            result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id, finalStatus);
                         }
 
                         if (result.success) {
@@ -887,12 +950,13 @@
                     clearSelection();
                 } else {
                     const record = pendingApproveRecord;
+                    const finalStatus = record.auto_status === 'A' ? chosenStatus : 'P';
                     let result;
 
                     if (record.id) {
-                        result = await ReportAPI.approveLOP(record.id, reason);
+                        result = await ReportAPI.approveLOP(record.id, reason, null, null, null, finalStatus);
                     } else {
-                        result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id);
+                        result = await ReportAPI.approveLOP(null, reason, record.labor_id, record.date, record.department_id, finalStatus);
                     }
                     
                     if (!result.success) throw new Error(result.error);
