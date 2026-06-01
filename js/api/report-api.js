@@ -673,43 +673,8 @@ const ReportAPI = {
                 attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
             }
 
-            let punchQuery = supabaseClient
-                .from('punch_records')
-                .select('labor_id, date, time, is_night_shift_end')
-                .eq('client_id', AUTH.getClientId())
-                .gte('date', startDate)
-                .lte('date', endDate)
-                .order('time', { ascending: true })
-                .limit(10000);
-            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
-
-            const [
-                { data: attendance, error: attError },
-                { data: billingPunches }
-            ] = await Promise.all([attendanceQuery, punchQuery]);
+            const { data: attendance, error: attError } = await attendanceQuery;
             if (attError) throw attError;
-
-            const punchTimeMap = {};
-            (billingPunches || []).forEach(p => {
-                const key = `${p.labor_id}_${p.date}`;
-                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: null, lastOut: null, nightEnd: null };
-                if (p.is_night_shift_end) {
-                    if (!punchTimeMap[key].nightEnd || p.time > punchTimeMap[key].nightEnd)
-                        punchTimeMap[key].nightEnd = p.time;
-                } else {
-                    if (!punchTimeMap[key].firstIn || p.time < punchTimeMap[key].firstIn)
-                        punchTimeMap[key].firstIn = p.time;
-                    if (!punchTimeMap[key].lastOut || p.time > punchTimeMap[key].lastOut)
-                        punchTimeMap[key].lastOut = p.time;
-                }
-            });
-            for (const entry of Object.values(punchTimeMap)) {
-                if (entry.nightEnd) {
-                    entry.lastOut = entry.nightEnd;
-                    if (!entry.firstIn) entry.firstIn = entry.nightEnd;
-                }
-                if (!entry.firstIn) entry.firstIn = entry.lastOut;
-            }
 
             // Get holidays — extend range ±1 day to match attendance buffer (cross-month blocks)
             const { data: holidaysData } = await supabaseClient
@@ -768,11 +733,8 @@ const ReportAPI = {
 
                     const key = `${laborer.labor_id}_${dateStr}`;
                     const record = attendanceMap[key] || null;
-                    const punchTimes = punchTimeMap[key] || null;
-                    const punchHours = punchTimes ? this.calculateHours(punchTimes.firstIn, punchTimes.lastOut) : 0;
-                    const usePunch = punchTimes && punchHours > 0;
-                    let firstIn = usePunch ? punchTimes.firstIn : (record ? record.firstIn : (punchTimes ? punchTimes.firstIn : null));
-                    let lastOut = usePunch ? punchTimes.lastOut : (record ? record.lastOut : (punchTimes ? punchTimes.lastOut : null));
+                    let firstIn = record ? record.firstIn : null;
+                    let lastOut = record ? record.lastOut : null;
                     let workedMinutes = this.calculateHours(firstIn, lastOut);
                     let status = null;
                     let hours = '';
@@ -905,25 +867,10 @@ const ReportAPI = {
                         lastOut = null;
                         workedMinutes = 0;
 
-                    } else if (workedMinutes > 0) {
-                        // FIX 2: Respect final_status if admin approved LOP (H→P)
-                        if (record && record.status === 'P') {
-                            status = 'P';
-                            presentCount++;
-                        } else {
-                            status = this.determineStatus(workedMinutes, minHours);
-                            if (status === 'P') presentCount++;
-                            else if (status === 'H') halfDayCount++;
-                            else absentCount++;
-                        }
-                        hours = this.formatMinutesToHHMM(workedMinutes);
-                        totalMinutes += workedMinutes;
-
                     } else if (record && record.status) {
-                        // Has record but no punch times (LOP approved absent)
                         status = record.status;
-                        if (status === 'P') presentCount++;
-                        else if (status === 'H') halfDayCount++;
+                        if (status === 'P') { presentCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
+                        else if (status === 'H') { halfDayCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
                         else absentCount++;
                     } else {
                         status = 'A';
