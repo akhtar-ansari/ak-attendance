@@ -670,8 +670,42 @@ const ReportAPI = {
                 attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
             }
 
-            const { data: attendance, error: attError } = await attendanceQuery;
+            let punchQuery = supabaseClient
+                .from('punch_records')
+                .select('labor_id, date, time, is_night_shift_end')
+                .eq('client_id', AUTH.getClientId())
+                .gte('date', startDate)
+                .lte('date', endDate)
+                .order('time', { ascending: true });
+            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
+
+            const [
+                { data: attendance, error: attError },
+                { data: billingPunches }
+            ] = await Promise.all([attendanceQuery, punchQuery]);
             if (attError) throw attError;
+
+            const punchTimeMap = {};
+            (billingPunches || []).forEach(p => {
+                const key = `${p.labor_id}_${p.date}`;
+                if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: null, lastOut: null, nightEnd: null };
+                if (p.is_night_shift_end) {
+                    if (!punchTimeMap[key].nightEnd || p.time > punchTimeMap[key].nightEnd)
+                        punchTimeMap[key].nightEnd = p.time;
+                } else {
+                    if (!punchTimeMap[key].firstIn || p.time < punchTimeMap[key].firstIn)
+                        punchTimeMap[key].firstIn = p.time;
+                    if (!punchTimeMap[key].lastOut || p.time > punchTimeMap[key].lastOut)
+                        punchTimeMap[key].lastOut = p.time;
+                }
+            });
+            for (const entry of Object.values(punchTimeMap)) {
+                if (entry.nightEnd) {
+                    entry.lastOut = entry.nightEnd;
+                    if (!entry.firstIn) entry.firstIn = entry.nightEnd;
+                }
+                if (!entry.firstIn) entry.firstIn = entry.lastOut;
+            }
 
             // Get holidays — extend range ±1 day to match attendance buffer (cross-month blocks)
             const { data: holidaysData } = await supabaseClient
@@ -730,8 +764,9 @@ const ReportAPI = {
 
                     const key = `${laborer.labor_id}_${dateStr}`;
                     const record = attendanceMap[key] || null;
-                    let firstIn = record ? record.firstIn : null;
-                    let lastOut = record ? record.lastOut : null;
+                    const punchTimes = punchTimeMap[key] || null;
+                    let firstIn = punchTimes ? punchTimes.firstIn : (record ? record.firstIn : null);
+                    let lastOut = punchTimes ? punchTimes.lastOut : (record ? record.lastOut : null);
                     let workedMinutes = this.calculateHours(firstIn, lastOut);
                     let status = null;
                     let hours = '';
