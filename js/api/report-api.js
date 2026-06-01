@@ -691,8 +691,8 @@ const ReportAPI = {
                     .from('punch_records')
                     .select('labor_id, date, time, is_night_shift_end')
                     .eq('client_id', AUTH.getClientId())
-                    .gte('date', startDate)
-                    .lte('date', endDate)
+                    .gte('date', fetchFrom)
+                    .lte('date', fetchTo)
                     .order('date').order('time')
                     .range(bFrom, bFrom + bPageSize - 1);
                 if (departmentFilter) bQ = bQ.eq('department_id', departmentFilter);
@@ -757,6 +757,21 @@ const ReportAPI = {
                     approved_by: a.approved_by
                 };
             });
+
+            // Prefer live punch data over stale daily_attendance for status computation.
+            // Falls back to daily_attendance only for manual approvals (approved_by set, or LP/LH/LA).
+            const getStatus = (laborId, dateStr, minHrs) => {
+                const pt = punchTimeMap[`${laborId}_${dateStr}`];
+                if (pt) {
+                    const mins = this.calculateHours(pt.firstIn, pt.lastOut);
+                    if (mins > 0) {
+                        const rec = attendanceMap[`${laborId}_${dateStr}`];
+                        if (rec && (rec.approved_by || ['LP', 'LH', 'LA'].includes(rec.status))) return rec.status;
+                        return this.determineStatus(mins, minHrs);
+                    }
+                }
+                return attendanceMap[`${laborId}_${dateStr}`]?.status || 'A';
+            };
 
             const reportData = laborers.map(laborer => {
                 const doj = new Date(laborer.date_of_joining);
@@ -823,12 +838,8 @@ const ReportAPI = {
                             }
 
                             // No working day found before/after block → benefit of doubt = Present
-                            const prevStatus = prevDateStr
-                                ? (attendanceMap[`${laborer.labor_id}_${prevDateStr}`]?.status || 'A')
-                                : 'P';
-                            const nextStatus = nextDateStr
-                                ? (attendanceMap[`${laborer.labor_id}_${nextDateStr}`]?.status || 'A')
-                                : 'P';
+                            const prevStatus = prevDateStr ? getStatus(laborer.labor_id, prevDateStr, minHours) : 'P';
+                            const nextStatus = nextDateStr ? getStatus(laborer.labor_id, nextDateStr, minHours) : 'P';
 
                             if (prevStatus === 'A' && nextStatus === 'A') {
                                 status = 'A';
@@ -855,13 +866,8 @@ const ReportAPI = {
                             const thursdayStr = `${thuDate.getFullYear()}-${pad(thuDate.getMonth()+1)}-${pad(thuDate.getDate())}`;
                             const saturdayStr = `${satDate.getFullYear()}-${pad(satDate.getMonth()+1)}-${pad(satDate.getDate())}`;
 
-                            const thursdayStatus = holidayMap[thursdayStr]
-                                ? 'P'
-                                : (attendanceMap[`${laborer.labor_id}_${thursdayStr}`]?.status || 'A');
-
-                            const saturdayStatus = holidayMap[saturdayStr]
-                                ? 'P'
-                                : (attendanceMap[`${laborer.labor_id}_${saturdayStr}`]?.status || 'A');
+                            const thursdayStatus = holidayMap[thursdayStr] ? 'P' : getStatus(laborer.labor_id, thursdayStr, minHours);
+                            const saturdayStatus = holidayMap[saturdayStr] ? 'P' : getStatus(laborer.labor_id, saturdayStr, minHours);
 
                             if (thursdayStatus === 'A' && saturdayStatus === 'A') {
                                 status = 'A';
@@ -878,19 +884,11 @@ const ReportAPI = {
                         lastOut = null;
                         workedMinutes = 0;
 
-                    } else if (record && record.status) {
-                        status = record.status;
-                        if (status === 'P') { presentCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
-                        else if (status === 'H') { halfDayCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
-                        else absentCount++;
-                    } else if (workedMinutes > 0) {
-                        status = this.determineStatus(workedMinutes, minHours);
-                        if (status === 'P') { presentCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
-                        else if (status === 'H') { halfDayCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
-                        else absentCount++;
                     } else {
-                        status = 'A';
-                        absentCount++;
+                        status = getStatus(laborer.labor_id, dateStr, minHours);
+                        if (status === 'P') { presentCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
+                        else if (status === 'H') { halfDayCount++; hours = this.formatMinutesToHHMM(workedMinutes); totalMinutes += workedMinutes; }
+                        else absentCount++;
                     }
 
                     days[day] = {
