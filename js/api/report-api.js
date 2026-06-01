@@ -83,7 +83,8 @@ const ReportAPI = {
                 .eq('client_id', clientId)
                 .gte('date', fromDate)
                 .lte('date', toDate)
-                .order('time', { ascending: true });
+                .order('time', { ascending: true })
+                .limit(10000);
             if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
 
             const deptQuery = supabaseClient
@@ -246,12 +247,8 @@ const ReportAPI = {
 
                     const punchTimes = punchTimeMap[key];
                     if (record || punchTimes) {
-                        // Use punch_records times when they yield valid hours; else fall back to daily_attendance
-                        // (single-punch days give 0h from punch_records but daily_attendance may have correct logout)
-                        const punchHours = punchTimes ? this.calculateHours(punchTimes.firstIn, punchTimes.lastOut) : 0;
-                        const usePunch = punchTimes && punchHours > 0;
-                        const firstLogin = usePunch ? punchTimes.firstIn : (record?.first_login || punchTimes?.firstIn || null);
-                        const lastLogout = usePunch ? punchTimes.lastOut : (record?.last_logout || punchTimes?.lastOut || null);
+                        const firstLogin = punchTimes ? punchTimes.firstIn : (record?.first_login || null);
+                        const lastLogout = punchTimes ? punchTimes.lastOut : (record?.last_logout || null);
                         const totalHours = (firstLogin && lastLogout)
                             ? this.calculateHours(firstLogin, lastLogout) / 60
                             : (record?.total_hours || null);
