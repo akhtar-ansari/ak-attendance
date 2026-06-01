@@ -679,7 +679,8 @@ const ReportAPI = {
                 .eq('client_id', AUTH.getClientId())
                 .gte('date', startDate)
                 .lte('date', endDate)
-                .order('time', { ascending: true });
+                .order('time', { ascending: true })
+                .limit(10000);
             if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
 
             const [
