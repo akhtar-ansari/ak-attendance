@@ -753,7 +753,8 @@ const ReportAPI = {
                 attendanceMap[key] = {
                     status: a.final_status,
                     firstIn: a.first_login,
-                    lastOut: a.last_logout
+                    lastOut: a.last_logout,
+                    approved_by: a.approved_by
                 };
             });
 
