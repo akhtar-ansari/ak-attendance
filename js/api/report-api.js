@@ -269,7 +269,10 @@ const ReportAPI = {
                             ['LP','LH','LA'].includes(record.final_status) ||
                             record.approved_by
                         );
-                        const effectiveStatus = sandwichStatus || (manualOverride ? record.final_status : autoStatus);
+                        // If worker actually worked (P or H), sandwich rule does not apply — they came in.
+                        const workedThisDay = autoStatus === 'P' || autoStatus === 'H';
+                        const effectiveStatus = manualOverride ? record.final_status
+                            : (workedThisDay ? autoStatus : (sandwichStatus || autoStatus));
                         result.push({
                             ...(record || {}),
                             labor_id: labor.labor_id,
