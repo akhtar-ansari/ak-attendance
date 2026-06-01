@@ -610,6 +610,16 @@
 
                 const mergedData = mergeData();
 
+                // Convert 1-based column number to Excel letter(s)
+                const colToLetter = n => {
+                    let s = '';
+                    while (n > 0) { const r = (n-1) % 26; s = String.fromCharCode(65+r) + s; n = Math.floor((n-1)/26); }
+                    return s;
+                };
+
+                const summaryStart = 7 + totalDayCols * 4;
+                let currentRow = 3; // rows 1+2 are headers
+
                 mergedData.forEach((labor, index) => {
                     let rowData = [
                         index + 1, labor.laborId, labor.iqamaNumber,
@@ -625,16 +635,30 @@
                     const totalHours = ReportAPI.formatMinutesToHHMM(labor.totalMinutes);
                     const ot = otData[labor.laborId] || { hours: 0, amount: 0 };
 
+                    // COUNTIF formulas for each status type from the St (4th col of each day group) cells
+                    const stCells = Array.from({ length: totalDayCols }, (_, i) => `${colToLetter(10 + i * 4)}${currentRow}`);
+                    const countFormula = val => stCells.map(c => `COUNTIF(${c},"${val}")`).join('+');
+                    const pCol  = colToLetter(summaryStart + 1);
+                    const hCol  = colToLetter(summaryStart + 2);
+                    const fCol  = colToLetter(summaryStart + 4);
+                    const nhCol = colToLetter(summaryStart + 5);
+                    const pdCol = colToLetter(summaryStart + 6);
+
                     rowData.push(
                         totalHours || '',
-                        labor.presentCount, labor.halfDayCount, labor.absentCount,
-                        labor.fridayCount, labor.holidayCount || 0,
-                        labor.totalPaidDays, labor.calculatedSalary,
+                        { formula: countFormula('P') },
+                        { formula: countFormula('H') },
+                        { formula: countFormula('A') },
+                        { formula: countFormula('F') },
+                        { formula: countFormula('NH') },
+                        { formula: `${pCol}${currentRow}+${fCol}${currentRow}+${nhCol}${currentRow}+${hCol}${currentRow}*0.5` },
+                        { formula: `ROUND(${pdCol}${currentRow}/${allDays.length}*${labor.monthlySalary},0)` },
                         ot.hours > 0 ? ot.hours : '',
                         ot.amount > 0 ? parseFloat(ot.amount.toFixed(2)) : ''
                     );
 
                     const dataRow = worksheet.addRow(rowData);
+                    currentRow++;
 
                     dataRow.eachCell((cell, colNumber) => {
                         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
@@ -654,7 +678,6 @@
                             }
                         }
 
-                        const summaryStart = 7 + totalDayCols * 4;
                         if (colNumber === summaryStart) { // Total Hrs
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.hoursTotal.bg } };
                             cell.font = { bold: true, color: { argb: colors.hoursTotal.font } };
