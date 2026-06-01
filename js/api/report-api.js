@@ -111,18 +111,11 @@ const ReportAPI = {
                 .gte('date', bufferFromStr)
                 .lte('date', bufferToStr);
 
-            const settingsQuery = supabaseClient
-                .from('settings')
-                .select('key, value')
-                .eq('client_id', clientId)
-                .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
-
             const [
                 { data: attendance, error: attError },
                 { data: departments },
-                { data: holidaysData },
-                { data: settingsData }
-            ] = await Promise.all([attendanceQuery, deptQuery, holidayQuery, settingsQuery]);
+                { data: holidaysData }
+            ] = await Promise.all([attendanceQuery, deptQuery, holidayQuery]);
 
             if (attError) throw attError;
 
@@ -160,11 +153,6 @@ const ReportAPI = {
             const holidayMap = {};
             (holidaysData || []).forEach(h => { holidayMap[h.date] = h.name; });
 
-            const settingsMap = {};
-            (settingsData || []).forEach(s => { settingsMap[s.key] = s.value; });
-            const fridaySandwichEnabled = settingsMap['sandwich_rule_friday'] !== 'false';
-            const nhSandwichEnabled = settingsMap['sandwich_rule_nh'] !== 'false';
-
             const attendanceMap = {};
             (attendance || []).forEach(a => {
                 const key = `${a.labor_id}_${a.date}`;
@@ -190,70 +178,6 @@ const ReportAPI = {
                         continue;
                     }
 
-                    // Determine sandwich-corrected status for NH and Friday days
-                    let sandwichStatus = null;
-
-                    if (isNH && nhSandwichEnabled) {
-                        // Walk backward skipping all NHs and Fridays to find nearest real working day
-                        let prevPtr = new Date(d);
-                        prevPtr.setDate(prevPtr.getDate() - 1);
-                        let prevDateStr = null;
-                        while (prevPtr >= bufferFrom) {
-                            const ps = `${prevPtr.getFullYear()}-${pad(prevPtr.getMonth()+1)}-${pad(prevPtr.getDate())}`;
-                            if (prevPtr.getDay() !== 5 && !holidayMap[ps]) { prevDateStr = ps; break; }
-                            prevPtr.setDate(prevPtr.getDate() - 1);
-                        }
-                        let nextPtr = new Date(d);
-                        nextPtr.setDate(nextPtr.getDate() + 1);
-                        let nextDateStr = null;
-                        while (nextPtr <= bufferTo) {
-                            const ns = `${nextPtr.getFullYear()}-${pad(nextPtr.getMonth()+1)}-${pad(nextPtr.getDate())}`;
-                            if (nextPtr.getDay() !== 5 && !holidayMap[ns]) { nextDateStr = ns; break; }
-                            nextPtr.setDate(nextPtr.getDate() + 1);
-                        }
-
-                        const getStatus = (dateKey, rec) => {
-                            if (!dateKey) return 'P';
-                            const r = attendanceMap[`${labor.labor_id}_${dateKey}`];
-                            if (r && r.first_login && r.last_logout) return this.determineStatus(this.calculateHours(r.first_login, r.last_logout), minHours);
-                            if (r && r.final_status) return r.final_status;
-                            return 'A';
-                        };
-                        const prevStatus = getStatus(prevDateStr);
-                        const nextStatus = getStatus(nextDateStr);
-                        sandwichStatus = (prevStatus === 'A' && nextStatus === 'A') ? 'A' : 'NH';
-
-                    } else if (isFriday && fridaySandwichEnabled) {
-                        const thuDate = new Date(d);
-                        thuDate.setDate(thuDate.getDate() - 1);
-                        const satDate = new Date(d);
-                        satDate.setDate(satDate.getDate() + 1);
-                        const thuStr = `${thuDate.getFullYear()}-${pad(thuDate.getMonth()+1)}-${pad(thuDate.getDate())}`;
-                        const satStr = `${satDate.getFullYear()}-${pad(satDate.getMonth()+1)}-${pad(satDate.getDate())}`;
-
-                        let thuStatus;
-                        if (holidayMap[thuStr]) {
-                            thuStatus = 'P';
-                        } else {
-                            const tr = attendanceMap[`${labor.labor_id}_${thuStr}`];
-                            if (tr && tr.first_login && tr.last_logout) thuStatus = this.determineStatus(this.calculateHours(tr.first_login, tr.last_logout), minHours);
-                            else if (tr && tr.final_status) thuStatus = tr.final_status;
-                            else thuStatus = 'A';
-                        }
-
-                        let satStatus;
-                        if (holidayMap[satStr]) {
-                            satStatus = 'P';
-                        } else {
-                            const sr = attendanceMap[`${labor.labor_id}_${satStr}`];
-                            if (sr && sr.first_login && sr.last_logout) satStatus = this.determineStatus(this.calculateHours(sr.first_login, sr.last_logout), minHours);
-                            else if (sr && sr.final_status) satStatus = sr.final_status;
-                            else satStatus = 'A';
-                        }
-
-                        sandwichStatus = (thuStatus === 'A' && satStatus === 'A') ? 'A' : 'F';
-                    }
-
                     const punchTimes = punchTimeMap[key];
                     if (record || punchTimes) {
                         const firstLogin = punchTimes ? punchTimes.firstIn : (record?.first_login || null);
@@ -269,10 +193,7 @@ const ReportAPI = {
                             ['LP','LH','LA'].includes(record.final_status) ||
                             record.approved_by
                         );
-                        // If worker actually worked (P or H), sandwich rule does not apply — they came in.
-                        const workedThisDay = autoStatus === 'P' || autoStatus === 'H';
-                        const effectiveStatus = manualOverride ? record.final_status
-                            : (workedThisDay ? autoStatus : (sandwichStatus || autoStatus));
+                        const effectiveStatus = manualOverride ? record.final_status : autoStatus;
                         result.push({
                             ...(record || {}),
                             labor_id: labor.labor_id,
@@ -293,7 +214,7 @@ const ReportAPI = {
                         });
                     } else {
                         const autoStatus = isNH ? 'NH' : (isFriday ? 'F' : 'A');
-                        const effectiveStatus = sandwichStatus || autoStatus;
+                        const effectiveStatus = autoStatus;
                         result.push({
                             id: null,
                             labor_id: labor.labor_id,
@@ -740,16 +661,6 @@ const ReportAPI = {
                 holidayMap[h.date] = h.name;
             });
 
-            // Load sandwich rule toggles — default ON if key not present
-            const { data: settingsData } = await supabaseClient
-                .from('settings')
-                .select('key, value')
-                .in('key', ['sandwich_rule_friday', 'sandwich_rule_nh']);
-            const settingsMap = {};
-            (settingsData || []).forEach(s => { settingsMap[s.key] = s.value; });
-            const fridaySandwichEnabled = settingsMap['sandwich_rule_friday'] !== 'false';
-            const nhSandwichEnabled = settingsMap['sandwich_rule_nh'] !== 'false';
-
             const attendanceMap = {};
             (attendance || []).forEach(a => {
                 const key = `${a.labor_id}_${a.date}`;
@@ -814,75 +725,15 @@ const ReportAPI = {
                         workedMinutes = 0;
 
                     } else if (holidayMap[dateStr]) {
-                        if (nhSandwichEnabled) {
-                            // NH sandwich rule — treat entire consecutive NH+Friday block as one unit.
-                            // Skip backward over all NHs and Fridays to find the nearest real working day.
-                            // Cross-month: allowed to step into the ±1 buffer day.
-                            const pad = n => String(n).padStart(2, '0');
-                            const bufferPrev = new Date(year, month - 1, 0); // last day of prev month
-
-                            let prevPtr = new Date(year, month - 1, day - 1);
-                            let prevDateStr = null;
-                            while (prevPtr >= bufferPrev) {
-                                const ps = `${prevPtr.getFullYear()}-${pad(prevPtr.getMonth()+1)}-${pad(prevPtr.getDate())}`;
-                                if (prevPtr.getDay() !== 5 && !holidayMap[ps]) { prevDateStr = ps; break; }
-                                prevPtr.setDate(prevPtr.getDate() - 1);
-                            }
-
-                            // Skip forward over all NHs and Fridays to find the nearest real working day.
-                            const bufferNext = new Date(year, month, 1); // first day of next month
-
-                            let nextPtr = new Date(year, month - 1, day + 1);
-                            let nextDateStr = null;
-                            while (nextPtr <= bufferNext) {
-                                const ns = `${nextPtr.getFullYear()}-${pad(nextPtr.getMonth()+1)}-${pad(nextPtr.getDate())}`;
-                                if (nextPtr.getDay() !== 5 && !holidayMap[ns]) { nextDateStr = ns; break; }
-                                nextPtr.setDate(nextPtr.getDate() + 1);
-                            }
-
-                            // No working day found before/after block → benefit of doubt = Present
-                            const prevStatus = prevDateStr ? getStatus(laborer.labor_id, prevDateStr, minHours) : 'P';
-                            const nextStatus = nextDateStr ? getStatus(laborer.labor_id, nextDateStr, minHours) : 'P';
-
-                            if (prevStatus === 'A' && nextStatus === 'A') {
-                                status = 'A';
-                                absentCount++;
-                            } else {
-                                status = 'NH';
-                                holidayCount++;
-                            }
-                        } else {
-                            status = 'NH';
-                            holidayCount++;
-                        }
+                        status = 'NH';
+                        holidayCount++;
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
 
                     } else if (isFriday) {
-                        if (fridaySandwichEnabled) {
-                            // Friday sandwich rule — cross-month boundary aware.
-                            // If Thursday or Saturday is itself an NH, treat it as Present (paid holiday ≠ absent).
-                            const pad = n => String(n).padStart(2, '0');
-                            const thuDate = new Date(year, month - 1, day - 1);
-                            const satDate = new Date(year, month - 1, day + 1);
-                            const thursdayStr = `${thuDate.getFullYear()}-${pad(thuDate.getMonth()+1)}-${pad(thuDate.getDate())}`;
-                            const saturdayStr = `${satDate.getFullYear()}-${pad(satDate.getMonth()+1)}-${pad(satDate.getDate())}`;
-
-                            const thursdayStatus = holidayMap[thursdayStr] ? 'P' : getStatus(laborer.labor_id, thursdayStr, minHours);
-                            const saturdayStatus = holidayMap[saturdayStr] ? 'P' : getStatus(laborer.labor_id, saturdayStr, minHours);
-
-                            if (thursdayStatus === 'A' && saturdayStatus === 'A') {
-                                status = 'A';
-                                absentCount++;
-                            } else {
-                                status = 'F';
-                                fridayCount++;
-                            }
-                        } else {
-                            status = 'F';
-                            fridayCount++;
-                        }
+                        status = 'F';
+                        fridayCount++;
                         firstIn = null;
                         lastOut = null;
                         workedMinutes = 0;
