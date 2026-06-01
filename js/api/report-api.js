@@ -77,15 +77,26 @@ const ReportAPI = {
                 .lte('date', bufferToStr);
             if (departmentFilter) attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
 
-            let punchQuery = supabaseClient
-                .from('punch_records')
-                .select('labor_id, date, time, location_name, is_night_shift_end')
-                .eq('client_id', clientId)
-                .gte('date', fromDate)
-                .lte('date', toDate)
-                .order('time', { ascending: true })
-                .limit(10000);
-            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
+            // Paginate punch_records to bypass Supabase server-side 1000-row cap
+            const allPunches = [];
+            const punchPageSize = 1000;
+            let punchFrom = 0;
+            while (true) {
+                let punchQ = supabaseClient
+                    .from('punch_records')
+                    .select('labor_id, date, time, location_name, is_night_shift_end')
+                    .eq('client_id', clientId)
+                    .gte('date', fromDate)
+                    .lte('date', toDate)
+                    .order('date').order('time')
+                    .range(punchFrom, punchFrom + punchPageSize - 1);
+                if (departmentFilter) punchQ = punchQ.eq('department_id', departmentFilter);
+                const { data: punchPage, error: punchPageErr } = await punchQ;
+                if (punchPageErr) throw punchPageErr;
+                allPunches.push(...(punchPage || []));
+                if (!punchPage || punchPage.length < punchPageSize) break;
+                punchFrom += punchPageSize;
+            }
 
             const deptQuery = supabaseClient
                 .from('departments')
@@ -108,18 +119,16 @@ const ReportAPI = {
 
             const [
                 { data: attendance, error: attError },
-                { data: punches, error: punchError },
                 { data: departments },
                 { data: holidaysData },
                 { data: settingsData }
-            ] = await Promise.all([attendanceQuery, punchQuery, deptQuery, holidayQuery, settingsQuery]);
+            ] = await Promise.all([attendanceQuery, deptQuery, holidayQuery, settingsQuery]);
 
             if (attError) throw attError;
-            if (punchError) throw punchError;
 
             const punchLocationMap = {};
             const punchTimeMap = {};
-            (punches || []).forEach(p => {
+            allPunches.forEach(p => {
                 const key = `${p.labor_id}_${p.date}`;
                 if (!punchLocationMap[key]) punchLocationMap[key] = p.location_name || '';
                 if (!punchTimeMap[key]) punchTimeMap[key] = { firstIn: null, lastOut: null, nightEnd: null };
@@ -670,21 +679,29 @@ const ReportAPI = {
                 attendanceQuery = attendanceQuery.eq('department_id', departmentFilter);
             }
 
-            let punchQuery = supabaseClient
-                .from('punch_records')
-                .select('labor_id, date, time, is_night_shift_end')
-                .eq('client_id', AUTH.getClientId())
-                .gte('date', startDate)
-                .lte('date', endDate)
-                .order('time', { ascending: true })
-                .limit(10000);
-            if (departmentFilter) punchQuery = punchQuery.eq('department_id', departmentFilter);
-
-            const [
-                { data: attendance, error: attError },
-                { data: billingPunches }
-            ] = await Promise.all([attendanceQuery, punchQuery]);
+            const [{ data: attendance, error: attError }] = await Promise.all([attendanceQuery]);
             if (attError) throw attError;
+
+            // Paginate punch_records to bypass Supabase server-side 1000-row cap
+            const billingPunches = [];
+            const bPageSize = 1000;
+            let bFrom = 0;
+            while (true) {
+                let bQ = supabaseClient
+                    .from('punch_records')
+                    .select('labor_id, date, time, is_night_shift_end')
+                    .eq('client_id', AUTH.getClientId())
+                    .gte('date', startDate)
+                    .lte('date', endDate)
+                    .order('date').order('time')
+                    .range(bFrom, bFrom + bPageSize - 1);
+                if (departmentFilter) bQ = bQ.eq('department_id', departmentFilter);
+                const { data: bPage, error: bErr } = await bQ;
+                if (bErr) throw bErr;
+                billingPunches.push(...(bPage || []));
+                if (!bPage || bPage.length < bPageSize) break;
+                bFrom += bPageSize;
+            }
 
             // Build punch time map with night-shift-end awareness
             const punchTimeMap = {};
