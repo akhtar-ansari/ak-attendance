@@ -264,8 +264,13 @@
         function initYearDropdown() {
             const yearSelect = document.getElementById('yearSelect');
             const currentYear = new Date().getFullYear();
+            yearSelect.innerHTML = '';
             for (let year = currentYear; year >= currentYear - 2; year--) {
-                yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+                const opt = document.createElement('option');
+                opt.value = year;
+                opt.textContent = year;
+                if (year === currentYear) opt.selected = true;
+                yearSelect.appendChild(opt);
             }
         }
 
