@@ -229,10 +229,12 @@
         <div class="content">
             <!-- Controls Bar -->
             <div class="controls-bar">
+                <button type="button" class="btn btn-outline-secondary px-2" onclick="shiftDay(-1)" title="Previous day">&#8592;</button>
                 <label>From</label>
                 <input type="date" id="fromDate" class="form-control">
                 <label>To</label>
                 <input type="date" id="toDate" class="form-control">
+                <button type="button" class="btn btn-outline-secondary px-2" onclick="shiftDay(1)" title="Next day">&#8594;</button>
                 <button type="button" class="btn btn-primary" onclick="generateReport()">📊 Generate</button>
                 <button type="button" class="btn btn-success" onclick="exportCSV()">📥 Export CSV</button>
                 <button type="button" class="freeze-btn" id="freezeBtn" onclick="freezeSelectedDate()" style="display: none;">🔒 Freeze Day</button>
@@ -529,6 +531,18 @@
             } catch (e) {
                 console.error('Failed to load OT records:', e);
             }
+        }
+
+        function shiftDay(delta) {
+            const from = document.getElementById('fromDate');
+            const to = document.getElementById('toDate');
+            if (!from.value) return;
+            const d = new Date(from.value);
+            d.setDate(d.getDate() + delta);
+            const newVal = d.toISOString().split('T')[0];
+            from.value = newVal;
+            to.value = newVal;
+            generateReport();
         }
 
         async function generateReport() {
