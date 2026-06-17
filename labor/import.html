@@ -97,13 +97,13 @@
                 <div class="card-body">
                     <h3 style="margin-bottom: 15px;">📋 Instructions</h3>
                     <ol style="line-height: 2; color: #555; margin-left: 20px;">
-                        <li>Download the CSV template below</li>
+                        <li>Download the CSV template below — it includes your real department codes</li>
                         <li>Fill in laborer details (do not change column headers)</li>
-                        <li>Save as CSV file</li>
-                        <li>Upload the file here</li>
-                        <li>Review and confirm import</li>
+                        <li><strong>Iqama:</strong> must be exactly 10 digits &nbsp;|&nbsp; <strong>Status:</strong> active or inactive &nbsp;|&nbsp; <strong>Date:</strong> DD/MM/YYYY</li>
+                        <li>Save as CSV and upload here</li>
                     </ol>
-                    <div style="margin-top: 20px;">
+                    <div id="deptCodes" style="margin-top:12px;font-size:13px;color:#555;"></div>
+                    <div style="margin-top: 16px;">
                         <button type="button" class="btn btn-primary" onclick="downloadTemplate()">📥 Download Template</button>
                     </div>
                 </div>
@@ -204,7 +204,6 @@
         let departments = [];
         let departmentMap = {};
 
-        // Load departments
         async function loadDepartments() {
             try {
                 SyncIndicator.show('Loading departments...');
@@ -215,6 +214,10 @@
                     departments.forEach(d => {
                         departmentMap[d.code.toUpperCase()] = d.id;
                     });
+
+                    // Show available department codes in the instructions
+                    const codeList = departments.map(d => `<code style="background:#e2e8f0;padding:2px 6px;border-radius:4px;font-weight:bold;">${d.code}</code> ${d.name}`).join(' &nbsp;|&nbsp; ');
+                    document.getElementById('deptCodes').innerHTML = `<strong>Available Department Codes:</strong> ${codeList}`;
                 }
                 SyncIndicator.hide();
             } catch (error) {
@@ -223,10 +226,22 @@
             }
         }
 
-        // Download template
+        // Download template using real department codes from the DB
         function downloadTemplate() {
-            CSVHandler.downloadTemplate();
-            Toast.success('Template downloaded!');
+            const firstCode = departments.length > 0 ? departments[0].code : 'DEPT';
+            const secondCode = departments.length > 1 ? departments[1].code : firstCode;
+            const headers = 'iqama_number,name,nationality,date_of_joining,department_code,status,monthly_salary';
+            const ex1 = `1234567890,Ahmed Hassan,Saudi,15/01/2025,${firstCode},active,3000`;
+            const ex2 = `0987654321,Mohammad Ali,Indian,01/02/2025,${secondCode},active,3000`;
+            const csv = `${headers}\n${ex1}\n${ex2}`;
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'labor_import_template.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+            Toast.success('Template downloaded with your department codes!');
         }
 
         // Handle file select
@@ -337,9 +352,14 @@
                 document.getElementById('previewSection').classList.remove('active');
                 document.getElementById('resultsSection').classList.add('active');
 
+                const allFailed = results.success === 0 && results.failed > 0;
+                const icon = allFailed ? '❌' : (results.failed > 0 ? '⚠️' : '✅');
+                const heading = allFailed ? 'Import Failed' : (results.failed > 0 ? 'Import Partial' : 'Import Complete!');
+                const headingColor = allFailed ? '#c53030' : (results.failed > 0 ? '#d69e2e' : '#48bb78');
+
                 let resultsHtml = `
-                    <div style="font-size: 64px; margin-bottom: 20px;">✅</div>
-                    <h2 style="color: #48bb78; margin-bottom: 20px;">Import Complete!</h2>
+                    <div style="font-size: 64px; margin-bottom: 20px;">${icon}</div>
+                    <h2 style="color: ${headingColor}; margin-bottom: 20px;">${heading}</h2>
                     <div class="preview-stats" style="justify-content: center;">
                         <div class="preview-stat valid">
                             <div class="number">${results.success}</div>
@@ -365,8 +385,8 @@
 
                 resultsHtml += `
                     <div style="margin-top: 30px;">
-                        <button class="btn btn-primary" onclick="location.href='master.html'">👥 Go to Labor Master</button>
-                        <button class="btn btn-secondary" onclick="resetUpload()">📤 Import More</button>
+                        ${results.success > 0 ? `<button class="btn btn-primary" onclick="location.href='master.html'">👥 Go to Labor Master</button>` : ''}
+                        <button class="btn btn-secondary" onclick="resetUpload()">📤 Try Again</button>
                     </div>
                 `;
 
