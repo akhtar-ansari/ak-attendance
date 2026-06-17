@@ -46,7 +46,7 @@ const CSVHandler = {
                     nationality: row.nationality,
                     dateOfJoining: this.parseDate(row.date_of_joining),
                     departmentCode: row.department_code.toUpperCase(),
-                    status: row.status || 'active'
+                    status: (row.status || 'active').toLowerCase()
                 });
             }
         }

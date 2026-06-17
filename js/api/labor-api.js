@@ -161,7 +161,7 @@ const LaborAPI = {
                     nationality: laborer.nationality.trim(),
                     date_of_joining: laborer.dateOfJoining,
                     department_id: laborer.departmentId,
-                    status: laborer.status || 'active',
+                    status: (laborer.status || 'active').toLowerCase(),
                     role: laborer.role || 'Labor',
                     monthly_salary: laborer.monthlySalary || 3000,
                     face_enrolled: false,
