@@ -138,13 +138,13 @@
             tiles.push(
                 { title: 'Labor Master', desc: isAdmin ? 'Manage laborers' : 'View laborers', icon: '👥', link: 'labor/master.html', class: 'tile-blue' },
                 { title: 'Reports', desc: 'Attendance & LOP', icon: '📊', link: 'reports/daily.html', class: 'tile-green' },
+                { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
                 { title: 'Punch Terminal', desc: 'Labor punch system', icon: '👆', link: `punch/index.html?client=${session.clientCode}`, class: 'tile-orange', target: '_blank' }
             );
 
             // Admin only tiles
             if (isAdmin) {
                 tiles.push(
-                    { title: '3PL Billing', desc: 'Monthly billing report', icon: '📋', link: 'reports/3pl-billing.html', class: 'tile-teal' },
                     { title: 'Overtime', desc: 'Submit & track OT', icon: '🕐', link: 'attendance/overtime.html', class: 'tile-indigo' }
                 );
             }

@@ -445,7 +445,7 @@
         }
 
         const session = AUTH.getSession();
-        const isAdmin = session.role === 'admin' || session.role === 'super_admin';
+        const isAdmin = session.role === 'admin' || session.role === 'super_admin' || session.role === 'supervisor';
 
         let departments = [];
         let laborers = [];
