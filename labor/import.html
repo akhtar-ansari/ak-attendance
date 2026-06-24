@@ -195,8 +195,9 @@
     <script src="../js/api/labor-api.js"></script>
 
     <script>
-        // Require admin role
-        if (!AUTH.requireRole(['super_admin', 'admin'])) {
+        // Require admin role or labor_import permission
+        if (!AUTH.hasRole(['super_admin', 'admin']) && !AUTH.hasPermission('labor_import')) {
+            alert('Access denied. You do not have permission to view this page.');
             window.location.href = '../dashboard.html';
         }
 

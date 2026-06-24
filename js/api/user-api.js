@@ -16,6 +16,7 @@ const UserAPI = {
                     role,
                     department_id,
                     status,
+                    permissions,
                     created_at,
                     departments:department_id (id, name, code)
                 `)
@@ -42,6 +43,7 @@ const UserAPI = {
                     role,
                     department_id,
                     status,
+                    permissions,
                     departments:department_id (id, name, code)
                 `)
                 .eq('client_id', AUTH.getClientId())
@@ -92,6 +94,7 @@ const UserAPI = {
                     role: user.role,
                     department_id: user.role === 'admin' ? null : user.departmentId,
                     status: user.status || 'active',
+                    permissions: user.permissions || {},
                     client_id: AUTH.getClientId()
                 })
                 .select(`
@@ -101,6 +104,7 @@ const UserAPI = {
                     role,
                     department_id,
                     status,
+                    permissions,
                     departments:department_id (id, name, code)
                 `)
                 .single();
@@ -137,6 +141,7 @@ const UserAPI = {
                 updateObj.department_id = updates.role === 'admin' ? null : updates.departmentId;
             }
             if (updates.status) updateObj.status = updates.status;
+            if (updates.permissions !== undefined) updateObj.permissions = updates.permissions;
             if (updates.password) updateObj.password_hash = await AUTH.hashPassword(oldData.username, updates.password);
 
             const { data, error } = await supabaseClient
@@ -151,6 +156,7 @@ const UserAPI = {
                     role,
                     department_id,
                     status,
+                    permissions,
                     departments:department_id (id, name, code)
                 `)
                 .single();

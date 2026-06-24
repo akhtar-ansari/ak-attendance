@@ -137,6 +137,21 @@
                         <option value="inactive">Inactive</option>
                     </select>
                 </div>
+
+                <div class="form-group" id="permissionsGroup" style="display:none;">
+                    <label>Module Access</label>
+                    <div style="display:flex;flex-direction:column;gap:10px;padding:12px;background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;margin-top:6px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+                            <input type="checkbox" id="perm_3pl_billing"> 3PL Billing Report
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+                            <input type="checkbox" id="perm_freeze_day"> Freeze Attendance Day
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+                            <input type="checkbox" id="perm_labor_import"> Import Laborers
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -283,17 +298,25 @@
             const role = document.getElementById('userRole').value;
             const deptGroup = document.getElementById('departmentGroup');
             const deptSelect = document.getElementById('userDepartment');
+            const permsGroup = document.getElementById('permissionsGroup');
 
             if (role === 'admin') {
-                // Admin doesn't need department - has access to all
                 deptGroup.style.display = 'none';
                 deptSelect.removeAttribute('required');
                 deptSelect.value = '';
+                permsGroup.style.display = 'none';
             } else {
-                // Supervisor must have department
                 deptGroup.style.display = 'block';
                 deptSelect.setAttribute('required', 'required');
+                permsGroup.style.display = 'block';
             }
+        }
+
+        // Reset permission checkboxes
+        function resetPermissions() {
+            ['perm_3pl_billing', 'perm_freeze_day', 'perm_labor_import'].forEach(id => {
+                document.getElementById(id).checked = false;
+            });
         }
 
         // Show add modal
@@ -310,6 +333,8 @@
             document.getElementById('userDepartment').value = '';
             document.getElementById('userStatus').value = 'active';
             document.getElementById('departmentGroup').style.display = 'block';
+            document.getElementById('permissionsGroup').style.display = 'none';
+            resetPermissions();
             document.getElementById('userModal').classList.add('active');
         }
 
@@ -329,7 +354,13 @@
             document.getElementById('userRole').value = user.role;
             document.getElementById('userDepartment').value = user.department_id || '';
             document.getElementById('userStatus').value = user.status;
-            
+
+            resetPermissions();
+            const perms = user.permissions || {};
+            document.getElementById('perm_3pl_billing').checked = !!perms['3pl_billing'];
+            document.getElementById('perm_freeze_day').checked = !!perms['freeze_day'];
+            document.getElementById('perm_labor_import').checked = !!perms['labor_import'];
+
             toggleDepartmentField();
             document.getElementById('userModal').classList.add('active');
         }
@@ -372,23 +403,29 @@
                 return;
             }
 
+            // Collect permissions for supervisor
+            const permissions = {};
+            if (role === 'supervisor') {
+                permissions['3pl_billing'] = document.getElementById('perm_3pl_billing').checked;
+                permissions['freeze_day'] = document.getElementById('perm_freeze_day').checked;
+                permissions['labor_import'] = document.getElementById('perm_labor_import').checked;
+            }
+
             try {
                 SyncIndicator.show(editId ? 'Updating...' : 'Creating...');
 
                 let result;
                 if (editId) {
-                    const updates = { name, role, status };
-                    // Only include departmentId for supervisor
+                    const updates = { name, role, status, permissions };
                     if (role === 'supervisor') {
                         updates.departmentId = departmentId;
                     } else {
-                        updates.departmentId = null; // Admin has no specific department
+                        updates.departmentId = null;
                     }
                     if (password) updates.password = password;
                     result = await UserAPI.update(editId, updates);
                 } else {
-                    const userData = { username, name, password, role, status };
-                    // Only include departmentId for supervisor
+                    const userData = { username, name, password, role, status, permissions };
                     if (role === 'supervisor') {
                         userData.departmentId = departmentId;
                     }

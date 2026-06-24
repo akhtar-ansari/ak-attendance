@@ -41,7 +41,7 @@ const AUTH = {
             // Now find user belonging to this client
             const { data: userData, error: userError } = await supabaseClient
                 .from('users')
-                .select('id, username, password_hash, name, role, department_id, status, client_id')
+                .select('id, username, password_hash, name, role, department_id, status, client_id, permissions')
                 .eq('username', username.toLowerCase().trim())
                 .eq('client_id', clientData.id)
                 .eq('status', 'active')
@@ -77,6 +77,7 @@ const AUTH = {
                 name: userData.name,
                 role: userData.role,
                 departmentId: userData.department_id,
+                permissions: userData.permissions || {},
                 clientId: clientData.id,
                 clientCode: clientCode.toUpperCase().trim(),
                 clientName: clientData.business_name,
@@ -209,6 +210,14 @@ const AUTH = {
             return false;
         }
         return true;
+    },
+
+    // Check if user has a specific module permission
+    hasPermission(key) {
+        const session = this.getSession();
+        if (!session) return false;
+        if (session.role === 'admin') return true;
+        return session.permissions?.[key] === true;
     },
 
     // Check if user has specific role
