@@ -107,6 +107,9 @@
             window.location.href = 'index.html';
         }
 
+        // Refresh permissions so tile visibility reflects latest DB state
+        AUTH.refreshPermissions().then(() => renderNavigationTiles());
+
         const session = AUTH.getSession();
         const isAdmin = session.role === 'admin';
 

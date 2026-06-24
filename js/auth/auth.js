@@ -169,6 +169,25 @@ const AUTH = {
         return session ? JSON.parse(session) : null;
     },
 
+    // Refresh permissions from DB and update session (call on page load for supervisors)
+    async refreshPermissions() {
+        const session = this.getSession();
+        if (!session || session.role === 'admin') return;
+        try {
+            const { data } = await supabaseClient
+                .from('users')
+                .select('permissions')
+                .eq('id', session.userId)
+                .single();
+            if (data) {
+                session.permissions = data.permissions || {};
+                localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+            }
+        } catch (e) {
+            // silently fail — session permissions remain as-is
+        }
+    },
+
     // Check if logged in
     isLoggedIn() {
         return this.getSession() !== null;

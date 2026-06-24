@@ -237,10 +237,13 @@
         if (!AUTH.requireLogin()) {
             window.location.href = '../index.html';
         }
-        if (!AUTH.hasRole(['admin']) && !AUTH.hasPermission('3pl_billing')) {
-            alert('Access denied. You do not have permission to view this page.');
-            window.location.href = '../dashboard.html';
-        }
+        // Refresh permissions from DB, then enforce access (handles stale session)
+        AUTH.refreshPermissions().then(() => {
+            if (!AUTH.hasRole(['admin']) && !AUTH.hasPermission('3pl_billing')) {
+                alert('Access denied. You do not have permission to view this page.');
+                window.location.href = '../dashboard.html';
+            }
+        });
 
         const session = AUTH.getSession();
         let departments = [];
