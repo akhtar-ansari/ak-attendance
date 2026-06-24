@@ -992,10 +992,10 @@ const ReportAPI = {
         }
     },
 
-    // Freeze a date (admin only)
+    // Freeze a date (admin or supervisor with freeze_day permission)
     async freezeDate(date) {
         try {
-            if (!AUTH.hasRole(['admin', 'super_admin'])) {
+            if (!AUTH.hasRole(['admin', 'super_admin']) && !AUTH.hasPermission('freeze_day')) {
                 return { success: false, error: 'Only admin can freeze attendance' };
             }
 
