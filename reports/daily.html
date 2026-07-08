@@ -500,7 +500,7 @@
         }
 
         function isDateApprovable(dateStr) {
-            if (isDateFrozen(dateStr)) return false;
+            if (!isAdmin && isDateFrozen(dateStr)) return false; // freeze blocks non-admins only
             const recordDate = new Date(dateStr);
             const today = new Date();
             const nextMonth1st = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -683,8 +683,7 @@
                 const canApprove = (record.auto_status === 'H' || record.auto_status === 'A') &&
                                    !record.approved_by &&
                                    isDateApprovable(record.date) &&
-                                   !record.isFriday &&
-                                   !dateFrozen;
+                                   !record.isFriday;
 
                 const wasApproved = record.approved_by && (record.final_status === 'P' || record.final_status === 'H');
 
@@ -699,7 +698,7 @@
                 let lopActionHtml = '';
                 if (record.isFriday) {
                     lopActionHtml = '<span class="frozen-badge">Friday</span>';
-                } else if (dateFrozen) {
+                } else if (dateFrozen && !isAdmin) {
                     lopActionHtml = '<span class="frozen-badge">🔒 Frozen</span>';
                 } else if (wasApproved) {
                     lopActionHtml = `
@@ -707,7 +706,7 @@
                             <span class="badge status-${record.final_status}">${record.auto_status} → ${record.final_status}</span>
                             <button class="reason-btn" onclick="viewReason('${recordKey}')" title="View reason">💬</button>
                             <span style="font-size: 11px; color: #38a169; white-space: nowrap;">by ${record.approved_by}</span>
-                            ${isAdmin && !dateFrozen && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
+                            ${isAdmin && record.id ? `<button class="undo-btn" onclick="undoApproval('${record.id}')">↩ Undo</button>` : ''}
                         </div>
                     `;
                 } else if (canApprove) {
